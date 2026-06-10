@@ -6,6 +6,7 @@ import type { AISConnector }         from './connectors/base.js'
 
 const AISSTREAM_KEY = process.env['AISSTREAM_API_KEY']
 const AISHUB_KEY    = process.env['AISHUB_API_KEY']
+const DRAIN_TIMEOUT = 10_000  // max ms to wait for in-flight writes on shutdown
 
 async function main(): Promise<void> {
   console.log('[ingestor] starting...')
@@ -24,7 +25,7 @@ async function main(): Promise<void> {
   if (AISHUB_KEY) {
     connectors.push(new AISHubConnector(AISHUB_KEY))
   } else {
-    console.warn('[ingestor] AISHUB_API_KEY not set — AISHub disabled (register free at https://www.aishub.net/join)')
+    console.warn('[ingestor] AISHUB_API_KEY not set — AISHub disabled')
   }
 
   if (connectors.length === 0) {
@@ -33,10 +34,18 @@ async function main(): Promise<void> {
     return
   }
 
+  // Track in-flight processRaw() calls so shutdown can drain them
+  let inFlight = 0
+
   for (const connector of connectors) {
     connector.onMessage(async (msg) => {
-      try { await processRaw(msg) } catch (err) {
+      inFlight++
+      try {
+        await processRaw(msg)
+      } catch (err) {
         console.warn(`[${connector.name}] processRaw error`, err)
+      } finally {
+        inFlight--
       }
     })
     connector.on('connect',    () => console.log(`[${connector.name}] connected`))
@@ -46,9 +55,29 @@ async function main(): Promise<void> {
 
   console.log(`[ingestor] ${connectors.length} source(s) active: ${connectors.map(c => c.name).join(', ')}`)
 
-  const shutdown = (): void => { connectors.forEach(c => c.stop()); process.exit(0) }
-  process.on('SIGTERM', shutdown)
-  process.on('SIGINT',  shutdown)
+  // ── Graceful shutdown ───────────────────────────────────────────────────────
+  let shuttingDown = false
+
+  const shutdown = async (signal: string): Promise<void> => {
+    if (shuttingDown) return
+    shuttingDown = true
+    console.log(`[ingestor] ${signal} received — stopping connectors`)
+    connectors.forEach(c => c.stop())
+
+    const deadline = Date.now() + DRAIN_TIMEOUT
+    while (inFlight > 0 && Date.now() < deadline) {
+      await new Promise(r => setTimeout(r, 50))
+    }
+    if (inFlight > 0) {
+      console.warn(`[ingestor] shutdown with ${inFlight} in-flight write(s) — exiting anyway`)
+    } else {
+      console.log('[ingestor] all writes flushed — exiting cleanly')
+    }
+    process.exit(0)
+  }
+
+  process.on('SIGTERM', () => { shutdown('SIGTERM').catch(console.error) })
+  process.on('SIGINT',  () => { shutdown('SIGINT').catch(console.error) })
 
   await new Promise(() => {}) // keep alive
 }

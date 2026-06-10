@@ -28,3 +28,15 @@ setupWebhooks()
 
 const port = parseInt(process.env['PORT'] ?? '3000')
 await app.listen({ port, host: '0.0.0.0' })
+
+// ── Graceful shutdown ─────────────────────────────────────────────────────────
+let shuttingDown = false
+const shutdown = async (signal: string): Promise<void> => {
+  if (shuttingDown) return
+  shuttingDown = true
+  app.log.info(`${signal} received — closing server`)
+  await app.close()
+  process.exit(0)
+}
+process.on('SIGTERM', () => { shutdown('SIGTERM').catch(console.error) })
+process.on('SIGINT',  () => { shutdown('SIGINT').catch(console.error) })
