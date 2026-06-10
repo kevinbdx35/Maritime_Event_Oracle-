@@ -237,6 +237,17 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
   }
   .card:hover { border-color: var(--teal); }
   @keyframes fadeIn { from { opacity:0; transform:translateY(-4px); } to { opacity:1; transform:none; } }
+  @keyframes markerPulse {
+    0%   { transform: scale(1);   opacity: .7; }
+    50%  { transform: scale(1.8); opacity: 0; }
+    100% { transform: scale(1);   opacity: 0; }
+  }
+  .marker-selected-ring {
+    position: absolute; inset: -6px; border-radius: 50%;
+    border: 2px solid #00d4aa;
+    animation: markerPulse 1.4s ease-out infinite;
+    pointer-events: none;
+  }
   .r1 { display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; }
   .r2 { display:flex; gap:8px; margin-bottom:3px; }
   .r3 { display:flex; justify-content:space-between; color:var(--muted); font-size:11px; }
@@ -433,9 +444,26 @@ const SHIP_PLACEHOLDER = 'data:image/svg+xml,' + encodeURIComponent(
 
 function closePanel() {
   panel.classList.remove('open');
+  if (selectedMmsi && markers[selectedMmsi]) {
+    markers[selectedMmsi].setIcon(mkIcon(markers[selectedMmsi]._state));
+  }
+  selectedMmsi = null;
 }
 
 function openVesselPanel(mmsi) {
+  // Restore previous selected marker
+  if (selectedMmsi && markers[selectedMmsi]) {
+    markers[selectedMmsi].setIcon(mkIcon(markers[selectedMmsi]._state));
+    markers[selectedMmsi].setOpacity(1);
+  }
+  selectedMmsi = mmsi;
+  // Highlight new selected marker
+  if (markers[mmsi]) {
+    markers[mmsi].setIcon(mkIconSelected(markers[mmsi]._state));
+    markers[mmsi].setOpacity(1);
+    map.panTo(markers[mmsi].getLatLng(), { animate: true, duration: 0.4 });
+  }
+
   vpBody.innerHTML = '<div id="vp-loading">Loading…</div>';
   vpPhoto.src = SHIP_PLACEHOLDER;
   panel.classList.add('open');
@@ -524,6 +552,21 @@ function mkIcon(state) {
   });
 }
 
+function mkIconSelected(state) {
+  const c = state === 'MOORED' ? '#00d4aa' : state === 'ANCHORED' ? '#4dabf7'
+          : (state === 'AT_SEA' || state === 'APPROACHING') ? '#e3b341' : '#8b949e';
+  return L.divIcon({
+    html: '<div style="position:relative;width:32px;height:32px;display:flex;align-items:center;justify-content:center">'
+        + '<div class="marker-selected-ring"></div>'
+        + '<svg width="32" height="32" viewBox="-8 -8 16 16" xmlns="http://www.w3.org/2000/svg">'
+        + '<polygon points="0,-7 5,4 0,2 -5,4" fill="' + c + '" stroke="#ffffff" stroke-width="1.2"/>'
+        + '</svg></div>',
+    className: '', iconSize: [32,32], iconAnchor: [16,16],
+  });
+}
+
+let selectedMmsi = null;
+
 function updateVessels(list) {
   const seen = new Set(list.map(v => v.mmsi));
   for (const v of list) {
@@ -537,8 +580,13 @@ function updateVessels(list) {
       });
       markers[v.mmsi] = m;
     }
-    markers[v.mmsi]._mmsi = v.mmsi;
-    markers[v.mmsi]._name = (v.name || '').toLowerCase();
+    markers[v.mmsi]._mmsi  = v.mmsi;
+    markers[v.mmsi]._name  = (v.name || '').toLowerCase();
+    markers[v.mmsi]._state = v.state || 'UNKNOWN';
+    // Keep selected marker highlighted if it gets updated
+    if (v.mmsi === selectedMmsi) {
+      markers[v.mmsi].setIcon(mkIconSelected(v.state));
+    }
   }
   for (const m of Object.keys(markers)) {
     if (!seen.has(m)) { markers[m].remove(); delete markers[m]; }
