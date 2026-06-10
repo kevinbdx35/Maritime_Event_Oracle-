@@ -12,6 +12,7 @@
     "seed-db": "tsx scripts/seed-db.ts",
     "create-key": "tsx scripts/create-key.ts",
     "deploy-anchor": "tsx scripts/deploy-anchor.ts",
+    "demo-oracle": "tsx --env-file=.env scripts/demo-oracle.ts",
     "db:up": "podman compose up -d",
     "db:down": "podman compose down",
     "db:migrate": "pnpm --filter @maritime/ingestor migrate",
