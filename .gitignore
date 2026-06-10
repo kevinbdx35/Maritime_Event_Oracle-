@@ -1,0 +1,31 @@
+# Environment — NEVER commit
+.env
+.env.local
+.env.*.local
+
+# Dependencies
+node_modules/
+
+# Build artifacts
+dist/
+*.tsbuildinfo
+
+# Solidity build outputs
+contracts/out/
+contracts/cache/
+contracts/lib/
+
+# Logs
+*.log
+/tmp/
+
+# Claude Code local config
+.claude/settings.local.json
+.claude/projects/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/settings.json
+*.swp

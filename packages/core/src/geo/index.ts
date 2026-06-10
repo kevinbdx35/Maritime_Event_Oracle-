@@ -1,0 +1,57 @@
+import { readFileSync } from 'fs'
+import { fileURLToPath } from 'url'
+import { dirname, join } from 'path'
+// @ts-ignore — @turf/* v6 types not exported via package.json "exports" for NodeNext; works at runtime
+import booleanPointInPolygon from '@turf/boolean-point-in-polygon'
+// @ts-ignore
+import { point } from '@turf/helpers'
+// @ts-ignore
+import type { Feature, FeatureCollection, Polygon } from 'geojson'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
+const zones = JSON.parse(
+  readFileSync(join(__dirname, './rotterdam.geojson'), 'utf8'),
+) as FeatureCollection
+
+type ZoneType = 'port' | 'anchorage'
+
+interface Zone {
+  feature: Feature<Polygon>
+  zone: ZoneType
+  name: string
+  id?: string
+}
+
+function loadZones(): Zone[] {
+  return (zones.features as Feature<Polygon>[]).map(f => {
+    const z: Zone = {
+      feature: f,
+      zone:    f.properties?.['zone'] as ZoneType,
+      name:    f.properties?.['name'] as string,
+    }
+    const id = f.properties?.['id'] as string | undefined
+    if (id !== undefined) z.id = id
+    return z
+  })
+}
+
+const ALL_ZONES = loadZones()
+const PORT_ZONES      = ALL_ZONES.filter(z => z.zone === 'port')
+const ANCHORAGE_ZONES = ALL_ZONES.filter(z => z.zone === 'anchorage')
+
+export function isInPort(lat: number, lon: number): boolean {
+  const pt = point([lon, lat])
+  return PORT_ZONES.some(z => booleanPointInPolygon(pt, z.feature))
+}
+
+export function isInAnchorage(lat: number, lon: number): { inside: boolean; zoneId?: string } {
+  const pt = point([lon, lat])
+  const match = ANCHORAGE_ZONES.find(z => booleanPointInPolygon(pt, z.feature))
+  const result: { inside: boolean; zoneId?: string } = { inside: !!match }
+  if (match?.id !== undefined) result.zoneId = match.id
+  return result
+}
+
+export function isInArea(lat: number, lon: number): boolean {
+  return isInPort(lat, lon) || isInAnchorage(lat, lon).inside
+}

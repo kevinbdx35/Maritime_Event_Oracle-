@@ -1,0 +1,23 @@
+{
+  "name": "maritime-event-oracle",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "test:core": "pnpm --filter @maritime/core test",
+    "demo": "tsx scripts/demo.ts",
+    "seed-db": "tsx scripts/seed-db.ts",
+    "create-key": "tsx scripts/create-key.ts",
+    "deploy-anchor": "tsx scripts/deploy-anchor.ts",
+    "db:up": "podman compose up -d",
+    "db:down": "podman compose down",
+    "db:migrate": "pnpm --filter @maritime/ingestor migrate"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.3",
+    "vitest": "^1.2.0"
+  }
+}

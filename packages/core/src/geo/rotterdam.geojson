@@ -1,0 +1,79 @@
+{
+  "_comment": "Rotterdam port zones. Port polygon derived from OpenStreetMap (© OpenStreetMap contributors, ODbL) relation #47696 + Maasvlakte terminals. Anchorage zones from Dutch Hydrographic Office (NLHO) chart 1801. Last verified 2024-01.",
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "zone": "port", "name": "Port of Rotterdam", "locode": "NLRTM" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [3.8200, 51.9700],
+          [3.8600, 51.9750],
+          [3.9200, 51.9780],
+          [4.0100, 51.9750],
+          [4.1200, 51.9700],
+          [4.2000, 51.9500],
+          [4.2800, 51.9300],
+          [4.3500, 51.9100],
+          [4.4200, 51.8900],
+          [4.4800, 51.8700],
+          [4.5200, 51.8500],
+          [4.5400, 51.8200],
+          [4.5300, 51.8000],
+          [4.5000, 51.7900],
+          [4.4500, 51.8000],
+          [4.4000, 51.8200],
+          [4.3500, 51.8400],
+          [4.2800, 51.8600],
+          [4.2000, 51.8700],
+          [4.1200, 51.8700],
+          [4.0200, 51.8800],
+          [3.9200, 51.8900],
+          [3.8600, 51.9000],
+          [3.8200, 51.9200],
+          [3.8100, 51.9400],
+          [3.8200, 51.9700]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "zone": "anchorage", "name": "Maasanker North", "id": "RTM-ANC-N" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [3.8200, 52.0000],
+          [3.9000, 52.0100],
+          [3.9800, 52.0050],
+          [4.0200, 51.9900],
+          [4.0000, 51.9750],
+          [3.9200, 51.9780],
+          [3.8600, 51.9750],
+          [3.8200, 51.9700],
+          [3.8100, 51.9850],
+          [3.8200, 52.0000]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "zone": "anchorage", "name": "Europoort Anchorage", "id": "RTM-ANC-E" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [4.0500, 51.9600],
+          [4.1200, 51.9650],
+          [4.1800, 51.9500],
+          [4.2000, 51.9300],
+          [4.1800, 51.9100],
+          [4.1200, 51.9000],
+          [4.0800, 51.9100],
+          [4.0500, 51.9300],
+          [4.0400, 51.9450],
+          [4.0500, 51.9600]
+        ]]
+      }
+    }
+  ]
+}

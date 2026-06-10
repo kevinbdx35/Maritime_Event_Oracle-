@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "paths": {
+      "@maritime/core": ["./packages/core/src/index.ts"],
+      "@maritime/core/*": ["./packages/core/src/*"]
+    }
+  },
+  "include": ["scripts"]
+}
