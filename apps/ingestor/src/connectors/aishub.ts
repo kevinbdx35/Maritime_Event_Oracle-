@@ -94,3 +94,16 @@ export class AISHubConnector extends AISConnector {
     }
   }
 }
+
+import type { ConnectorDescriptor } from './base.js'
+
+export const descriptor: ConnectorDescriptor = {
+  name:        'aishub',
+  envKey:      'AISHUB_API_KEY',
+  description: 'HTTP polling — community antenna network (60 s)',
+  transport:   'http-poll',
+}
+
+export function create(apiKey: string): AISHubConnector {
+  return new AISHubConnector(apiKey)
+}

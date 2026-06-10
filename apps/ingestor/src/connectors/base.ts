@@ -14,3 +14,15 @@ export abstract class AISConnector extends EventEmitter {
     return this.on('message', handler)
   }
 }
+
+export interface ConnectorDescriptor {
+  name: string
+  envKey: string
+  description: string
+  transport: 'websocket' | 'http-poll' | 'mqtt' | 'file'
+}
+
+export interface ConnectorModule {
+  descriptor: ConnectorDescriptor
+  create(apiKey: string): AISConnector
+}

@@ -1,11 +1,8 @@
 import { initProcessor, processRaw } from './processor.js'
 import { setupWebhooks }             from './webhooks.js'
-import { AISStreamConnector }        from './connectors/aisstream.js'
-import { AISHubConnector }           from './connectors/aishub.js'
-import type { AISConnector }         from './connectors/base.js'
+import { loadConnectors }            from './connectors/registry.js'
+import { consensusGate }             from './consensus.js'
 
-const AISSTREAM_KEY = process.env['AISSTREAM_API_KEY']
-const AISHUB_KEY    = process.env['AISHUB_API_KEY']
 const DRAIN_TIMEOUT = 10_000  // max ms to wait for in-flight writes on shutdown
 
 async function main(): Promise<void> {
@@ -14,23 +11,10 @@ async function main(): Promise<void> {
   await initProcessor()
   setupWebhooks()
 
-  const connectors: AISConnector[] = []
-
-  if (AISSTREAM_KEY) {
-    connectors.push(new AISStreamConnector(AISSTREAM_KEY))
-  } else {
-    console.warn('[ingestor] AISSTREAM_API_KEY not set — AISStream disabled')
-  }
-
-  if (AISHUB_KEY) {
-    connectors.push(new AISHubConnector(AISHUB_KEY))
-  } else {
-    console.warn('[ingestor] AISHUB_API_KEY not set — AISHub disabled')
-  }
+  const connectors = loadConnectors()
 
   if (connectors.length === 0) {
-    console.warn('[ingestor] no live sources configured — waiting (demo/replay mode)')
-    await new Promise(() => {})
+    await new Promise(() => {})  // demo/replay mode — keep alive
     return
   }
 
@@ -39,6 +23,10 @@ async function main(): Promise<void> {
 
   for (const connector of connectors) {
     connector.onMessage(async (msg) => {
+      // Gate: only forward to FSM when consensus (or fallback) is reached.
+      // Positions are always persisted inside processRaw regardless.
+      if (!consensusGate.check(msg.mmsi, msg.source)) return
+
       inFlight++
       try {
         await processRaw(msg)
@@ -53,7 +41,7 @@ async function main(): Promise<void> {
     await connector.start()
   }
 
-  console.log(`[ingestor] ${connectors.length} source(s) active: ${connectors.map(c => c.name).join(', ')}`)
+  console.log(`[ingestor] running — min_sources=${consensusGate.minSources}, fallback=60s`)
 
   // ── Graceful shutdown ───────────────────────────────────────────────────────
   let shuttingDown = false

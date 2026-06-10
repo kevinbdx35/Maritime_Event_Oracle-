@@ -167,3 +167,16 @@ export class AISStreamConnector extends AISConnector {
     return isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString()
   }
 }
+
+import type { ConnectorDescriptor } from './base.js'
+
+export const descriptor: ConnectorDescriptor = {
+  name:        'aisstream',
+  envKey:      'AISSTREAM_API_KEY',
+  description: 'Real-time WebSocket — coastal + near-shore coverage',
+  transport:   'websocket',
+}
+
+export function create(apiKey: string): AISStreamConnector {
+  return new AISStreamConnector(apiKey)
+}
