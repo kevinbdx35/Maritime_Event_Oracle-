@@ -38,6 +38,10 @@ SELECT create_hypertable('positions', 'time', if_not_exists => TRUE);
 
 CREATE INDEX IF NOT EXISTS positions_mmsi_time ON positions (mmsi, time DESC);
 
+-- Raw positions are only needed for live display, FSM windows and recent
+-- evidence — signed events/voyages keep their own copies forever.
+SELECT add_retention_policy('positions', INTERVAL '30 days', if_not_exists => TRUE);
+
 -- ─────────────────────────────────────────
 -- Vessel state snapshots (FSM persistence)
 -- ─────────────────────────────────────────
