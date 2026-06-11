@@ -32,8 +32,9 @@ export const HISTORY_SATURATION_MINUTES = 120
 
 // Static source quality scores (0-100)
 export const SOURCE_SCORES: Record<string, number> = {
-  aisstream: 85, // terrestrial WebSocket, ~2 s latency
-  aishub:    80, // terrestrial HTTP polling, ~60 s latency
-  satellite: 70, // sat AIS, higher latency / lower density
-  manual:    50,
+  aisstream:   85, // terrestrial WebSocket, ~2 s latency
+  digitraffic: 82, // official Fintraffic open data, ~30 s polling
+  aishub:      80, // terrestrial HTTP polling, ~60 s latency
+  satellite:   70, // sat AIS, higher latency / lower density
+  manual:      50,
 }

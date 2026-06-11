@@ -6,12 +6,14 @@
 //   2. Add one import + one entry in REGISTRY below — that's it.
 
 import type { AISConnector, ConnectorModule } from './base.js'
-import * as aisstream from './aisstream.js'
-import * as aishub    from './aishub.js'
+import * as aisstream   from './aisstream.js'
+import * as aishub      from './aishub.js'
+import * as digitraffic from './digitraffic.js'
 
 const REGISTRY: ConnectorModule[] = [
   aisstream,
   aishub,
+  digitraffic,
   // ← add new connectors here
 ]
 

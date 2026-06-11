@@ -19,6 +19,8 @@ const BOUNDING_BOXES = [
   [[48.20, -4.70], [49.80, -1.50]],
   // Mediterranean: Marseille, Fos
   [[43.10, 4.70], [43.55, 5.50]],
+  // Gulf of Finland: Helsinki, Tallinn — overlaps digitraffic for consensus
+  [[59.20, 23.50], [60.50, 27.50]],
 ] as [[number, number], [number, number]][]
 
 export class AISStreamConnector extends AISConnector {
