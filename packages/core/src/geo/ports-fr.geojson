@@ -114,6 +114,50 @@
     },
     {
       "type": "Feature",
+      "properties": { "zone": "port", "name": "Port de Saint-Malo", "locode": "FRSML", "id": "FRSML" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-2.045, 48.632], [-1.998, 48.632], [-1.998, 48.655],
+          [-2.045, 48.655], [-2.045, 48.632]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "zone": "port", "name": "Port de Lorient", "locode": "FRLRT", "id": "FRLRT" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-3.385, 47.700], [-3.330, 47.700], [-3.330, 47.760],
+          [-3.385, 47.760], [-3.385, 47.700]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "zone": "port", "name": "Quiberon — Port Maria", "locode": "FRQUI", "id": "FRQUI" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-3.132, 47.470], [-3.112, 47.470], [-3.112, 47.483],
+          [-3.132, 47.483], [-3.132, 47.470]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "zone": "anchorage", "name": "Golfe du Morbihan", "id": "FR-ANC-MORBIHAN" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [-2.970, 47.540], [-2.730, 47.540], [-2.730, 47.665],
+          [-2.970, 47.665], [-2.970, 47.540]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
       "properties": { "zone": "anchorage", "name": "Rade de Brest", "id": "FR-ANC-BREST" },
       "geometry": {
         "type": "Polygon",

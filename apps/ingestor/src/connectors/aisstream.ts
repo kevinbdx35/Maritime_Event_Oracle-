@@ -17,6 +17,8 @@ const BOUNDING_BOXES = [
   [[44.75, -2.40], [47.40, -0.40]],
   // Brittany + Cherbourg
   [[48.20, -4.70], [49.80, -1.50]],
+  // South Brittany: Lorient, Quiberon, Golfe du Morbihan, Belle-Île
+  [[47.20, -3.70], [47.80, -2.30]],
   // Mediterranean: Marseille, Fos
   [[43.10, 4.70], [43.55, 5.50]],
   // Gulf of Finland: Helsinki, Tallinn — overlaps digitraffic for consensus
