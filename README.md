@@ -8,13 +8,14 @@ A business API that **certifies maritime events** — port arrivals, departures,
 
 ## What It Does
 
-1. **Ingests** real-time AIS data from multiple sources (AISStream.io WebSocket, AISHub HTTP polling).
-2. **Detects** port calls via a per-vessel finite state machine with hysteresis filtering.
-3. **Scores** each event with a 5-component explainable confidence score.
-4. **Signs** every event with an Ed25519 key — unforgeable without the private key.
-5. **Anchors** hourly batches on-chain via a Merkle root — immutable once confirmed.
-6. **Tracks** full voyages: geodesic distance, speed profile, time breakdown (underway / anchored / moored).
-7. **Serves** a REST API (with API-key auth) and a live Leaflet dashboard.
+1. **Ingests** real-time AIS data from multiple sources via a plug-and-play connector registry (AISStream.io WebSocket, AISHub HTTP polling, Digitraffic Marine open data).
+2. **Corroborates** every vessel across sources — a consensus gate requires ≥ 2 independent sources within a 5-minute window before events are generated (60 s single-source fallback).
+3. **Detects** port calls via a per-vessel finite state machine with hysteresis filtering.
+4. **Scores** each event with a 5-component explainable confidence score.
+5. **Signs** every event with an Ed25519 key — unforgeable without the private key.
+6. **Anchors** hourly batches on-chain via a Merkle root — immutable once confirmed.
+7. **Tracks** full voyages: geodesic distance, speed profile, time breakdown (underway / anchored / moored).
+8. **Serves** a REST API (with API-key auth) and a live Leaflet dashboard showing per-vessel source corroboration.
 
 ---
 
@@ -22,9 +23,12 @@ A business API that **certifies maritime events** — port arrivals, departures,
 
 ```
 AISStream.io  ──┐
-                ├──► AISConnector (EventEmitter)
-AISHub  ────────┘         │
+AISHub  ────────┼──► Connector registry (plug-and-play AISConnector modules)
+Digitraffic ────┘         │
                           │ AISMessage (Zod-validated)
+                          ▼
+                    ConsensusGate                 ← ≥ 2 sources in 5-min window
+                          │                         (60 s single-source fallback)
                           ▼
                     CorroborationTracker          ← 10-min sliding window per MMSI
                           │
@@ -59,11 +63,11 @@ AISHub  ────────┘         │
 
 ```
 apps/
-  ingestor/       AIS ingestion, FSM, event detection, voyage tracking
+  ingestor/       AIS connectors + registry, consensus gate, FSM, voyage tracking
   api/            Fastify REST API + live dashboard
   anchor-worker/  Hourly Merkle anchoring to EVM chain
 packages/
-  core/           Shared types, FSM, scoring, crypto, geo (Rotterdam polygons)
+  core/           Shared types, FSM, scoring, crypto, geo (Rotterdam + French ports polygons)
 contracts/
   src/MerkleAnchor.sol   Stores Merkle roots on-chain
   src/OracleConsumer.sol Example consumer contract
@@ -149,6 +153,8 @@ pnpm --filter @maritime/api start
 | `EVT_PUBLIC_KEY` | **yes** | Matching public key (64 hex chars) |
 | `AISSTREAM_API_KEY` | live mode | AISStream.io WebSocket key (free tier, [register](https://aisstream.io)) |
 | `AISHUB_API_KEY` | optional | AISHub polling key (free, adds corroboration score) |
+| `DIGITRAFFIC_USER` | optional | Digitraffic Marine (Finland, open data) — set any app name to enable, no key needed |
+| `CONSENSUS_MIN_SOURCES` | optional | Distinct sources required before FSM events (default: `2`) |
 | `DB_HOST/PORT/NAME/USER/PASSWORD` | **yes** | PostgreSQL/TimescaleDB connection |
 | `ANCHOR_RPC_URL` | anchor | RPC URL — Anvil (`http://localhost:8545`) or Base Sepolia |
 | `ANCHOR_PRIVATE_KEY` | anchor | Ethereum private key for tx submission |
@@ -179,8 +185,10 @@ pnpm create-key "my-client" read 200
 |---|---|---|---|
 | `GET` | `/` | public | Live Leaflet dashboard |
 | `GET` | `/stream/events` | public | SSE feed — one event per push |
-| `GET` | `/api/live` | public | Current vessel positions + stats |
+| `GET` | `/api/live` | public | Current vessel positions, active sources per vessel + stats |
 | `GET` | `/api/geo/rotterdam` | public | Rotterdam port/anchorage GeoJSON |
+| `GET` | `/api/geo/ports-fr` | public | French ports GeoJSON |
+| `GET` | `/api/vessels/:mmsi` | public | Vessel detail: state, recent events, active sources (5-min window) |
 | `GET` | `/events` | key | Paginated event list (`type`, `mmsi`, `from`, `to`, `limit`, `cursor`) |
 | `GET` | `/events/:id` | key | Single event with full Merkle proof |
 | `GET` | `/vessels/:mmsi/events` | key | Events for a specific vessel |
@@ -257,7 +265,7 @@ Five components, weights sum to 1.00:
 | `message_density` | 30% | AIS messages in ±10 min window (saturates at 12 msgs) |
 | `kinematic_consistency` | 25% | Speed/course changes physically plausible |
 | `transponder_history` | 18% | Minutes tracking this MMSI (saturates at 120 min) |
-| `source_quality` | 12% | Static score per source (AISStream 85, AISHub 80, satellite 70) |
+| `source_quality` | 12% | Static score per source (AISStream 85, Digitraffic 82, AISHub 80, satellite 70) |
 | `source_corroboration` | 15% | Independent sources that saw this MMSI in last 10 min (2 sources → 80/100) |
 
 Weights live in `packages/core/src/scoring/weights.ts`.
@@ -324,9 +332,10 @@ pnpm build               # TypeScript compilation (all packages)
 
 ### Adding a new AIS source
 
-Extend `AISConnector` from `apps/ingestor/src/connectors/base.ts`:
+Create `apps/ingestor/src/connectors/<name>.ts` — extend `AISConnector` and export a `descriptor` + `create()`:
 
 ```typescript
+import type { ConnectorDescriptor } from './base.js'
 import { AISConnector } from './base.js'
 
 export class MySourceConnector extends AISConnector {
@@ -338,9 +347,20 @@ export class MySourceConnector extends AISConnector {
 
   stop(): void { /* disconnect */ }
 }
+
+export const descriptor: ConnectorDescriptor = {
+  name:        'mysource',
+  envKey:      'MYSOURCE_API_KEY',  // connector activates only when this env var is set
+  description: 'What this source provides',
+  transport:   'websocket',         // or 'http-poll' | 'mqtt' | 'file'
+}
+
+export function create(apiKey: string): MySourceConnector {
+  return new MySourceConnector(apiKey)
+}
 ```
 
-Register it in `apps/ingestor/src/index.ts`. The `CorroborationTracker` automatically picks up the new source name.
+Then add one import + one entry to `REGISTRY` in `apps/ingestor/src/connectors/registry.ts` — that's it. The consensus gate and `CorroborationTracker` automatically pick up the new source name. Optionally add a quality score for it in `packages/core/src/scoring/weights.ts` (unknown sources default to 50).
 
 ---
 
@@ -349,6 +369,7 @@ Register it in `apps/ingestor/src/index.ts`. The `CorroborationTracker` automati
 | Feature | Description |
 |---|---|
 | Satellite AIS | Integrate Spire/exactEarth; lower `source_quality` score (higher latency) |
+| Helsinki port zone | FIHEL polygons — AISStream + Digitraffic both cover the Gulf of Finland, enabling the first dual-source corroborated events |
 | STS transfer detection | Ship-to-ship transfers via proximity + simultaneous low speed |
 | AIS spoofing detection | Cross-check trajectory against Kalman-filter prediction |
 | Chainlink adapter | Live parametric insurance pay-outs on arrival delay |
