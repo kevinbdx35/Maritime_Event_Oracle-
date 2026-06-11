@@ -14,6 +14,7 @@ interface OpenVoyage {
   arrivalEventId: string
   arrivalTime: Date
   mmsi: string
+  port: string
   imo?: string
   name?: string
 }
@@ -30,19 +31,20 @@ function nextVoyId(): string {
 
 export async function openVoyage(params: {
   mmsi: string; imo?: string; name?: string
-  arrivalEventId: string; arrivalTime: Date
+  arrivalEventId: string; arrivalTime: Date; port?: string
 }): Promise<void> {
   const id = nextVoyId()
-  const entry: OpenVoyage = { id, arrivalEventId: params.arrivalEventId, arrivalTime: params.arrivalTime, mmsi: params.mmsi }
+  const port = params.port ?? 'NLRTM'
+  const entry: OpenVoyage = { id, arrivalEventId: params.arrivalEventId, arrivalTime: params.arrivalTime, mmsi: params.mmsi, port }
   if (params.imo  !== undefined) entry.imo  = params.imo
   if (params.name !== undefined) entry.name = params.name
   openVoyages.set(params.mmsi, entry)
 
   await query(
     `INSERT INTO voyages (id, mmsi, imo, vessel_name, port, arrival_event_id, period_from)
-     VALUES ($1,$2,$3,$4,'NLRTM',$5,$6)
+     VALUES ($1,$2,$3,$4,$5,$6,$7)
      ON CONFLICT (id) DO NOTHING`,
-    [id, params.mmsi, params.imo ?? null, params.name ?? null,
+    [id, params.mmsi, params.imo ?? null, params.name ?? null, port,
      params.arrivalEventId, params.arrivalTime],
   )
 }
@@ -91,7 +93,7 @@ export async function closeVoyage(params: {
     vessel:             Object.assign({ mmsi: params.mmsi },
                           params.imo  !== undefined ? { imo:  params.imo  } : {},
                           params.name !== undefined ? { name: params.name } : {}),
-    port:               'NLRTM',
+    port:               open.port,
     arrival_event_id:   open.arrivalEventId,
     departure_event_id: params.departureEventId,
     period:             { from: open.arrivalTime.toISOString(), to: params.departureTime.toISOString() },

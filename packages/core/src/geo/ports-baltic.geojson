@@ -1,0 +1,49 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": { "zone": "port", "name": "Helsinki West Harbour", "locode": "FIHEL", "id": "FIHEL" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [24.895, 60.140], [24.935, 60.140], [24.935, 60.165],
+          [24.895, 60.165], [24.895, 60.140]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "zone": "port", "name": "Helsinki South Harbour", "locode": "FIHEL", "id": "FIHEL" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [24.940, 60.155], [24.985, 60.155], [24.985, 60.175],
+          [24.940, 60.175], [24.940, 60.155]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "zone": "port", "name": "Helsinki Vuosaari Harbour", "locode": "FIHEL", "id": "FIHEL" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [25.160, 60.200], [25.215, 60.200], [25.215, 60.240],
+          [25.160, 60.240], [25.160, 60.200]
+        ]]
+      }
+    },
+    {
+      "type": "Feature",
+      "properties": { "zone": "port", "name": "Tallinn Old City Harbour", "locode": "EETLL", "id": "EETLL" },
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [[
+          [24.740, 59.435], [24.780, 59.435], [24.780, 59.460],
+          [24.740, 59.460], [24.740, 59.435]
+        ]]
+      }
+    }
+  ]
+}

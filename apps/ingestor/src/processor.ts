@@ -5,6 +5,7 @@ import {
   computeConfidence,
   signEvent,
   isInArea,
+  portFor,
   VesselState,
   EVENT_SCHEMA_VERSION,
 } from '@maritime/core'
@@ -126,7 +127,7 @@ export async function processMessage(msg: AISMessage): Promise<void> {
 
     // Voyage lifecycle
     if (transition.eventType === 'PORT_ARRIVAL') {
-      const voyParams: Parameters<typeof openVoyage>[0] = { mmsi, arrivalEventId: evt.id, arrivalTime: transition.timestamp }
+      const voyParams: Parameters<typeof openVoyage>[0] = { mmsi, arrivalEventId: evt.id, arrivalTime: transition.timestamp, port: evt.port }
       if (msg.imo  !== undefined) voyParams.imo  = msg.imo
       if (msg.name !== undefined) voyParams.name = msg.name
       await openVoyage(voyParams)
@@ -180,12 +181,19 @@ function buildEvent(input: EventBuildInput): MaritimeEvent {
   if (input.imo  !== undefined) vessel.imo  = input.imo
   if (input.name !== undefined) vessel.name = input.name
 
+  // Resolve port from the position window, scanning backwards — departure
+  // windows may end outside the zone. NLRTM fallback for gap/anchorage events.
+  let port: string | null = null
+  for (let i = input.positions.length - 1; i >= 0 && port === null; i--) {
+    port = portFor(input.positions[i]!.lat, input.positions[i]!.lon)
+  }
+
   const evt: MaritimeEvent = {
     id: nextId(),
     schema: EVENT_SCHEMA_VERSION,
     vessel,
     event: input.type,
-    port: 'NLRTM',
+    port: port ?? 'NLRTM',
     timestamp: input.timestamp.toISOString(),
     confidence: input.confidence ?? safeBreakdown.weighted_score,
     confidence_breakdown: safeBreakdown,

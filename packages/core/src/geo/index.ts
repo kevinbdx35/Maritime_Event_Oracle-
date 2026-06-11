@@ -17,7 +17,7 @@ function mergeGeoJSON(...files: string[]): FeatureCollection {
   return { type: 'FeatureCollection', features }
 }
 
-const zones = mergeGeoJSON('./rotterdam.geojson', './ports-fr.geojson')
+const zones = mergeGeoJSON('./rotterdam.geojson', './ports-fr.geojson', './ports-baltic.geojson')
 
 type ZoneType = 'port' | 'anchorage'
 
@@ -35,7 +35,7 @@ function loadZones(): Zone[] {
       zone:    f.properties?.['zone'] as ZoneType,
       name:    f.properties?.['name'] as string,
     }
-    const id = f.properties?.['id'] as string | undefined
+    const id = (f.properties?.['id'] ?? f.properties?.['locode']) as string | undefined
     if (id !== undefined) z.id = id
     return z
   })
@@ -60,4 +60,11 @@ export function isInAnchorage(lat: number, lon: number): { inside: boolean; zone
 
 export function isInArea(lat: number, lon: number): boolean {
   return isInPort(lat, lon) || isInAnchorage(lat, lon).inside
+}
+
+// UN/LOCODE of the port zone containing this position, or null if outside all zones.
+export function portFor(lat: number, lon: number): string | null {
+  const pt = point([lon, lat])
+  const match = PORT_ZONES.find(z => booleanPointInPolygon(pt, z.feature))
+  return match?.id ?? null
 }
