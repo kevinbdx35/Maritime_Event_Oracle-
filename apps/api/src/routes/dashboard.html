@@ -1,0 +1,936 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Maritime Event Oracle</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg:     #0d1117;
+    --bg2:    #161b22;
+    --bg3:    #21262d;
+    --border: #30363d;
+    --text:   #e6edf3;
+    --muted:  #8b949e;
+    --teal:   #00d4aa;
+    --orange: #ff8c00;
+    --blue:   #4dabf7;
+    --red:    #ff4444;
+    --yellow: #e3b341;
+    --mono:   'SF Mono','Cascadia Code','Consolas',monospace;
+  }
+  html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--mono); font-size: 13px; }
+
+  #header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 16px; background: var(--bg2); border-bottom: 1px solid var(--border);
+    height: 48px; flex-shrink: 0;
+  }
+  #header h1 { font-size: 14px; font-weight: 600; letter-spacing: .4px; }
+  #header h1 em { color: var(--teal); font-style: normal; }
+  #live-dot {
+    display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    background: var(--muted); margin-right: 6px; transition: background .3s;
+  }
+  #live-dot.on { background: var(--teal); box-shadow: 0 0 6px var(--teal); }
+  #live-label { font-size: 11px; color: var(--muted); }
+
+  body { display: flex; flex-direction: column; }
+  #main { display: grid; grid-template-columns: 1fr 380px; flex: 1; min-height: 0; }
+  #map-wrap { position: relative; }
+  #map  { width: 100%; height: 100%; }
+
+  /* ── Zone navigation ─────────────────────────────────────────────────────── */
+  #zone-bar {
+    position: absolute; top: 10px; right: 10px; z-index: 1000;
+    display: flex; gap: 6px;
+  }
+  .zone-btn {
+    background: var(--bg2); border: 1px solid var(--border); color: var(--muted);
+    font-family: var(--mono); font-size: 11px; padding: 5px 10px;
+    border-radius: 4px; cursor: pointer; transition: all .15s;
+  }
+  .zone-btn b { color: var(--text); font-weight: 700; margin-left: 4px; }
+  .zone-btn:hover { border-color: var(--text); color: var(--text); }
+  .zone-btn.active { border-color: var(--teal); color: var(--teal); }
+  .zone-btn.active b { color: var(--teal); }
+
+  /* ── Legend ──────────────────────────────────────────────────────────────── */
+  #legend {
+    position: absolute; left: 10px; bottom: 10px; z-index: 1000;
+    background: var(--bg2); border: 1px solid var(--border); border-radius: 6px;
+    padding: 8px 10px; font-size: 10px; color: var(--muted); line-height: 1.9;
+  }
+  .lg-line { display: inline-block; width: 18px; height: 0; vertical-align: middle; margin-right: 4px; }
+  .lg-line.solid-teal  { border-top: 2px solid var(--teal); }
+  .lg-line.dash-blue   { border-top: 2px dashed var(--blue); }
+  .lg-line.dash-teal   { border-top: 2px dashed var(--teal); }
+
+  /* ── Cluster dark theme ──────────────────────────────────────────────────── */
+  .marker-cluster-small, .marker-cluster-medium, .marker-cluster-large {
+    background: rgba(0, 212, 170, .18);
+  }
+  .marker-cluster-small div, .marker-cluster-medium div, .marker-cluster-large div {
+    background: rgba(13, 17, 23, .88); color: var(--teal);
+    border: 1px solid var(--teal); font-family: var(--mono); font-size: 11px;
+  }
+
+  #feed-panel { background: var(--bg2); border-left: 1px solid var(--border); display: flex; flex-direction: column; min-height: 0; }
+  #feed-hdr   { padding: 10px 14px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); letter-spacing: 1px; text-transform: uppercase; flex-shrink: 0; }
+  #evt-count  { color: var(--teal); font-weight: 700; }
+
+  /* Search + filter toolbar */
+  #feed-toolbar { padding: 8px; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
+  #search-wrap { position: relative; }
+  #search-input {
+    width: 100%; background: var(--bg3); border: 1px solid var(--border); border-radius: 4px;
+    color: var(--text); font-family: var(--mono); font-size: 12px;
+    padding: 6px 28px 6px 10px; outline: none;
+  }
+  #search-input:focus { border-color: var(--teal); }
+  #search-input::placeholder { color: var(--muted); }
+  #search-clear {
+    position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+    background: none; border: none; color: var(--muted); cursor: pointer; font-size: 14px;
+    display: none;
+  }
+  #type-pills { display: flex; gap: 4px; flex-wrap: wrap; }
+  .pill {
+    font-size: 10px; padding: 2px 8px; border-radius: 10px; cursor: pointer;
+    border: 1px solid var(--border); background: var(--bg3); color: var(--muted);
+    font-family: var(--mono); transition: all .15s;
+  }
+  .pill:hover { border-color: var(--text); color: var(--text); }
+  .pill.active { background: var(--bg); color: var(--text); border-color: var(--text); font-weight: 700; }
+  .pill[data-type="PORT_ARRIVAL"].active    { border-color: var(--teal);   color: var(--teal); }
+  .pill[data-type="PORT_DEPARTURE"].active  { border-color: var(--orange); color: var(--orange); }
+  .pill[data-type="ANCHORAGE"].active       { border-color: var(--blue);   color: var(--blue); }
+  .pill[data-type="AIS_GAP"].active         { border-color: var(--red);    color: var(--red); }
+
+  #feed-list  { overflow-y: auto; flex: 1; padding: 8px; }
+  .card.hidden { display: none; }
+  #no-results { display: none; text-align: center; color: var(--muted); font-size: 12px; padding: 24px 0; }
+
+  .card {
+    background: var(--bg3); border: 1px solid var(--border); border-radius: 6px;
+    padding: 10px 12px; margin-bottom: 6px; cursor: pointer;
+    animation: fadeIn .25s ease;
+  }
+  .card:hover { border-color: var(--teal); }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(-4px); } to { opacity:1; transform:none; } }
+  @keyframes markerPulse {
+    0%   { transform: scale(1);   opacity: .7; }
+    50%  { transform: scale(1.8); opacity: 0; }
+    100% { transform: scale(1);   opacity: 0; }
+  }
+  .marker-selected-ring {
+    position: absolute; inset: -6px; border-radius: 50%;
+    border: 2px solid #00d4aa;
+    animation: markerPulse 1.4s ease-out infinite;
+    pointer-events: none;
+  }
+  .r1 { display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; }
+  .r2 { display:flex; gap:8px; margin-bottom:3px; }
+  .r3 { display:flex; justify-content:space-between; color:var(--muted); font-size:11px; }
+  .etype { font-weight:700; font-size:12px; }
+  .etype.PORT_ARRIVAL    { color:var(--teal);   }
+  .etype.PORT_DEPARTURE  { color:var(--orange); }
+  .etype.ANCHORAGE_START,.etype.ANCHORAGE_END { color:var(--blue);   }
+  .etype.AIS_GAP         { color:var(--red);    }
+  .badge { font-size:10px; padding:2px 6px; border-radius:10px; background:var(--bg); border:1px solid var(--border); }
+  .badge.hi { border-color:var(--teal);   color:var(--teal);   }
+  .badge.md { border-color:var(--yellow); color:var(--yellow); }
+  .badge.lo { border-color:var(--red);    color:var(--red);    }
+  .vname { font-weight:600; max-width:160px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; cursor:pointer; }
+  .vname:hover { color:var(--teal); text-decoration:underline; }
+  .mmsi  { color:var(--muted); }
+  .chain { font-size:10px; color:var(--blue); }
+
+  #footer {
+    height: 40px; flex-shrink: 0; background: var(--bg2); border-top: 1px solid var(--border);
+    display: flex; align-items: center; padding: 0 16px; gap: 32px; font-size: 11px; color: var(--muted);
+  }
+  #footer b { color: var(--text); font-weight: 600; }
+
+  .src-multi  { font-size:10px; color:var(--teal); font-weight:600; }
+  .src-single { font-size:10px; color:var(--muted); }
+
+  .leaflet-container { background: #0a0f14; }
+  .leaflet-popup-content-wrapper, .leaflet-popup-tip {
+    background: var(--bg2); color: var(--text); border: 1px solid var(--border);
+    border-radius: 4px; font-family: var(--mono); font-size: 12px; box-shadow: none;
+  }
+
+  /* ── Vessel panel ──────────────────────────────────────────────────────── */
+  #vessel-panel {
+    position: absolute; top: 0; left: 0; bottom: 0; z-index: 1000;
+    width: 300px;
+    background: var(--bg2); border-right: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    transform: translateX(-100%);
+    transition: transform .25s cubic-bezier(.4,0,.2,1);
+    box-shadow: 4px 0 24px #0008;
+    overflow: hidden;
+  }
+  #vessel-panel.open { transform: translateX(0); }
+
+  #vp-photo {
+    width: 100%; height: 170px; object-fit: cover; background: var(--bg3);
+    flex-shrink: 0; display: block;
+  }
+  #vp-photo-wrap { position: relative; flex-shrink: 0; }
+  #vp-close {
+    position: absolute; top: 8px; right: 8px;
+    background: #0009; border: 1px solid var(--border); color: var(--text);
+    width: 28px; height: 28px; border-radius: 50%; cursor: pointer;
+    font-size: 16px; line-height: 28px; text-align: center;
+    transition: background .15s;
+  }
+  #vp-close:hover { background: var(--bg2); }
+
+  #vp-body { padding: 14px 16px; overflow-y: auto; flex: 1; }
+
+  #vp-name { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+  #vp-sub  { font-size: 11px; color: var(--muted); margin-bottom: 14px; letter-spacing: .3px; }
+
+  .vp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 16px; }
+  .vp-field label { display: block; font-size: 10px; text-transform: uppercase;
+    letter-spacing: 1px; color: var(--muted); margin-bottom: 3px; }
+  .vp-field span  { font-size: 12px; font-weight: 600; }
+
+  #vp-spark { min-height: 40px; }
+  #vp-spark .spark-max { font-size: 9px; color: var(--muted); }
+
+  .state-badge {
+    display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: 600;
+    border: 1px solid currentColor;
+  }
+  .state-MOORED    { color: var(--teal);   }
+  .state-ANCHORED  { color: var(--blue);   }
+  .state-AT_SEA    { color: var(--yellow); }
+  .state-APPROACHING { color: var(--yellow); }
+  .state-UNKNOWN   { color: var(--muted);  }
+
+  #vp-events-hdr { font-size: 10px; text-transform: uppercase; letter-spacing: 1px;
+    color: var(--muted); margin-bottom: 8px; border-top: 1px solid var(--border); padding-top: 14px; }
+
+  /* Vertical event timeline */
+  .vp-timeline { position: relative; padding-left: 16px; }
+  .vp-timeline::before { content: ''; position: absolute; left: 3px; top: 6px; bottom: 6px;
+    width: 1px; background: var(--border); }
+  .vp-tl-item { position: relative; display: flex; justify-content: space-between;
+    align-items: center; padding: 5px 0; font-size: 11px; }
+  .tl-dot { position: absolute; left: -16px; top: 50%; transform: translate(-1.5px,-50%);
+    width: 8px; height: 8px; border-radius: 50%; border: 2px solid var(--bg2); }
+  .vp-tl-item .ve-type { font-weight: 600; }
+  .vp-tl-item .ve-conf { color: var(--muted); }
+
+  #vp-mt-link { display: block; margin-top: 16px; font-size: 11px; color: var(--blue);
+    text-decoration: none; text-align: center; padding: 6px; border: 1px solid var(--border);
+    border-radius: 4px; }
+  #vp-mt-link:hover { background: var(--bg3); }
+
+  #vp-loading { text-align: center; padding: 40px 0; color: var(--muted); font-size: 12px; }
+  #vp-error   { color: var(--red); text-align: center; padding: 20px; font-size: 12px; }
+
+  /* ── Event detail modal ──────────────────────────────────────────────────── */
+  #evt-modal {
+    position: fixed; inset: 0; z-index: 3000;
+    background: #000a; display: flex; align-items: center; justify-content: center;
+  }
+  #evt-modal.hidden { display: none; }
+  #evt-modal-card {
+    width: 440px; max-height: 82vh; overflow-y: auto;
+    background: var(--bg2); border: 1px solid var(--border); border-radius: 8px;
+    padding: 18px 20px;
+  }
+  #em-close { float: right; background: none; border: none; color: var(--muted);
+    font-size: 16px; cursor: pointer; }
+  #em-close:hover { color: var(--text); }
+  .em-title { font-size: 14px; font-weight: 700; margin-bottom: 2px; }
+  .em-sub   { font-size: 11px; color: var(--muted); margin-bottom: 14px; }
+  .em-hdr   { font-size: 10px; text-transform: uppercase; letter-spacing: 1px;
+    color: var(--muted); margin: 14px 0 8px; border-top: 1px solid var(--border); padding-top: 12px; }
+  .bar-row   { margin-bottom: 7px; }
+  .bar-label { display: flex; justify-content: space-between; font-size: 10px;
+    color: var(--muted); margin-bottom: 3px; }
+  .bar-label b { color: var(--text); }
+  .bar-track { height: 6px; background: var(--bg3); border-radius: 3px; overflow: hidden; }
+  .bar-fill  { height: 100%; background: var(--teal); border-radius: 3px; }
+  .hash-row  { display: flex; justify-content: space-between; align-items: center;
+    font-size: 11px; padding: 3px 0; gap: 8px; }
+  .hash-row .hk { color: var(--muted); flex-shrink: 0; }
+  .hash-val  { color: var(--text); font-size: 10px; overflow: hidden; text-overflow: ellipsis;
+    white-space: nowrap; direction: rtl; }
+  .copy-btn  { background: var(--bg3); border: 1px solid var(--border); color: var(--muted);
+    border-radius: 4px; cursor: pointer; font-size: 10px; padding: 2px 7px; font-family: var(--mono);
+    flex-shrink: 0; }
+  .copy-btn:hover { border-color: var(--teal); color: var(--teal); }
+  .em-btn { width: 100%; margin-top: 14px; padding: 7px; background: var(--bg3);
+    border: 1px solid var(--teal); color: var(--teal); border-radius: 4px; cursor: pointer;
+    font-family: var(--mono); font-size: 11px; }
+  .em-btn:hover { background: var(--bg); }
+  .em-muted { color: var(--muted); font-size: 11px; }
+</style>
+</head>
+<body>
+
+<div id="header">
+  <h1>Maritime Event Oracle &nbsp;·&nbsp; <em>Rotterdam</em> · French ports · <em>Gulf of Finland</em></h1>
+  <div><span id="live-dot"></span><span id="live-label">connecting…</span></div>
+</div>
+
+<div id="main">
+  <div id="map-wrap">
+    <div id="map"></div>
+
+    <!-- Zone navigation -->
+    <div id="zone-bar">
+      <button class="zone-btn active" data-zone="rotterdam">Rotterdam<b>—</b></button>
+      <button class="zone-btn" data-zone="france">France<b>—</b></button>
+      <button class="zone-btn" data-zone="baltic">Baltic<b>—</b></button>
+    </div>
+
+    <!-- Legend -->
+    <div id="legend">
+      <div><span style="color:#00d4aa">▲</span> Moored &nbsp;<span style="color:#4dabf7">▲</span> Anchored &nbsp;<span style="color:#e3b341">▲</span> Underway &nbsp;<span style="color:#8b949e">▲</span> Unknown</div>
+      <div><span style="color:#00d4aa">●</span> multi-source corroborated &nbsp;·&nbsp; marker points to course (COG)</div>
+      <div><span class="lg-line solid-teal"></span>Rotterdam &nbsp;<span class="lg-line dash-blue"></span>French ports &nbsp;<span class="lg-line dash-teal"></span>Baltic (2-source zone)</div>
+    </div>
+
+    <!-- Vessel info panel (slides in over the map) -->
+    <div id="vessel-panel">
+      <div id="vp-photo-wrap">
+        <img id="vp-photo" alt="vessel photo"/>
+        <button id="vp-close" onclick="closePanel()">✕</button>
+      </div>
+      <div id="vp-body">
+        <div id="vp-loading">Loading…</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="feed-panel">
+    <div id="feed-hdr"><span>Live Events</span><span id="evt-count">0</span></div>
+    <div id="feed-toolbar">
+      <div id="search-wrap">
+        <input id="search-input" type="text" placeholder="Search vessel name or MMSI…" autocomplete="off"/>
+        <button id="search-clear" title="Clear">✕</button>
+      </div>
+      <div id="type-pills">
+        <span class="pill active" data-type="ALL">All</span>
+        <span class="pill" data-type="PORT_ARRIVAL">↓ Arrival</span>
+        <span class="pill" data-type="PORT_DEPARTURE">↑ Departure</span>
+        <span class="pill" data-type="ANCHORAGE">⚓ Anchorage</span>
+        <span class="pill" data-type="AIS_GAP">⚠ Gap</span>
+      </div>
+    </div>
+    <div id="feed-list">
+      <div id="no-results">No events match the current filter.</div>
+    </div>
+  </div>
+</div>
+
+<div id="footer">
+  <span>Events today: <b id="s-today">—</b></span>
+  <span>Active vessels (1h): <b id="s-vessels">—</b></span>
+  <span>Multi-source: <b id="s-multi">—</b></span>
+  <span>Last anchor: <b id="s-anchor">—</b></span>
+</div>
+
+<!-- Event detail modal -->
+<div id="evt-modal" class="hidden">
+  <div id="evt-modal-card"></div>
+</div>
+
+<script>
+const ICONS  = { PORT_ARRIVAL:'↓', PORT_DEPARTURE:'↑', ANCHORAGE_START:'⚓', ANCHORAGE_END:'⚓', AIS_GAP:'⚠' };
+const ETYPE_COLOR = { PORT_ARRIVAL:'#00d4aa', PORT_DEPARTURE:'#ff8c00', ANCHORAGE_START:'#4dabf7', ANCHORAGE_END:'#4dabf7', AIS_GAP:'#ff4444' };
+
+// AIS ship type → human label
+function shipTypeLabel(t) {
+  if (!t) return '—';
+  if (t >= 70 && t <= 79) return '📦 Cargo';
+  if (t >= 80 && t <= 89) return '🛢️ Tanker';
+  if (t >= 60 && t <= 69) return '🛳️ Passenger';
+  if (t === 30)            return '🎣 Fishing';
+  if (t === 31 || t === 32) return '🔗 Towing';
+  if (t === 35)            return '⚔️ Military';
+  if (t === 36)            return '⛵ Sailing';
+  if (t === 37)            return '🚤 Pleasure';
+  if (t === 50)            return '🧭 Pilot';
+  if (t === 51)            return '🆘 SAR';
+  if (t === 52)            return '⚓ Tug';
+  if (t === 55)            return '🚔 Law enforcement';
+  if (t >= 90 && t <= 99) return '🚢 Other';
+  return '🚢 Type ' + t;
+}
+
+// ISO alpha-2 → flag emoji
+function flagEmoji(cc) {
+  if (!cc) return '';
+  const base = 0x1F1E6 - 65;
+  return String.fromCodePoint(...[...cc.toUpperCase()].map(c => base + c.charCodeAt(0)));
+}
+
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+}
+
+// ── Map ──────────────────────────────────────────────────────────────────────
+const map = L.map('map', { attributionControl: false }).setView([51.90, 4.10], 11);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { maxZoom: 18 }).addTo(map);
+L.control.attribution({ prefix: '© OpenStreetMap · CartoDB' }).addTo(map);
+
+map.on('click', () => { closePanel(); clearEvidence(); });
+
+function portPopup(f) {
+  const locode = f.properties.locode || f.properties.id || '';
+  const zone   = f.properties.zone === 'anchorage' ? 'Anchorage' : 'Port';
+  return '<b>' + esc(f.properties.name) + '</b>'
+    + (locode ? '<br><span style="color:#8b949e;font-size:11px">' + esc(locode) + ' · ' + zone + '</span>' : '');
+}
+
+fetch('/api/geo/rotterdam').then(r => r.json()).then(geo => {
+  L.geoJSON(geo, {
+    style: f => f.properties.zone === 'port'
+      ? { color:'#00d4aa', fillColor:'#00d4aa', fillOpacity:.07, weight:1.5 }
+      : { color:'#4dabf7', fillColor:'#4dabf7', fillOpacity:.10, weight:1 },
+    onEachFeature: (f, l) => l.bindPopup(portPopup(f)),
+  }).addTo(map);
+});
+
+fetch('/api/geo/ports-fr').then(r => r.json()).then(geo => {
+  L.geoJSON(geo, {
+    style: f => f.properties.zone === 'port'
+      ? { color:'#4dabf7', fillColor:'#4dabf7', fillOpacity:.06, weight:1.5, dashArray:'4 3' }
+      : { color:'#e3b341', fillColor:'#e3b341', fillOpacity:.08, weight:1, dashArray:'4 3' },
+    onEachFeature: (f, l) => l.bindPopup(portPopup(f)),
+  }).addTo(map);
+});
+
+// Baltic ports — dual-source consensus zone (aisstream + digitraffic)
+fetch('/api/geo/ports-baltic').then(r => r.json()).then(geo => {
+  L.geoJSON(geo, {
+    style: { color:'#00d4aa', fillColor:'#00d4aa', fillOpacity:.07, weight:1.5, dashArray:'4 3' },
+    onEachFeature: (f, l) => l.bindPopup(portPopup(f)),
+  }).addTo(map);
+});
+
+// ── Zone navigation ──────────────────────────────────────────────────────────
+const ZONES = {
+  rotterdam: { bounds: [[51.75,  3.80], [52.05,  4.60]] },
+  france:    { bounds: [[43.00, -5.00], [51.30,  5.60]] },
+  baltic:    { bounds: [[59.20, 23.50], [60.50, 27.50]] },
+};
+
+function inZone(v, key) {
+  const b = ZONES[key].bounds;
+  return v.lat >= b[0][0] && v.lat <= b[1][0] && v.lon >= b[0][1] && v.lon <= b[1][1];
+}
+
+document.getElementById('zone-bar').addEventListener('click', e => {
+  const btn = e.target.closest('.zone-btn');
+  if (!btn) return;
+  document.querySelectorAll('.zone-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  map.flyToBounds(ZONES[btn.dataset.zone].bounds, { padding: [30, 30], duration: 1.2 });
+});
+
+function updateZoneCounts(vessels) {
+  for (const key of Object.keys(ZONES)) {
+    const n = vessels.filter(v => inZone(v, key)).length;
+    const btn = document.querySelector('.zone-btn[data-zone="' + key + '"] b');
+    if (btn) btn.textContent = n;
+  }
+}
+
+// ── Vessel markers ───────────────────────────────────────────────────────────
+const markers = {};
+let selectedMmsi = null;
+
+const clusterGroup = L.markerClusterGroup({
+  disableClusteringAtZoom: 9,
+  maxClusterRadius: 45,
+  spiderfyOnMaxZoom: false,
+  showCoverageOnHover: false,
+  chunkedLoading: true,
+});
+map.addLayer(clusterGroup);
+
+function stateColor(s) {
+  return s === 'MOORED' ? '#00d4aa' : s === 'ANCHORED' ? '#4dabf7'
+       : (s === 'AT_SEA' || s === 'APPROACHING') ? '#e3b341' : '#8b949e';
+}
+
+// Triangle rotated to course; teal dot top-right when corroborated by ≥2 sources
+function vesselIcon(v, selected) {
+  const c   = stateColor(v.state || 'UNKNOWN');
+  const rot = (typeof v.cog === 'number' && v.cog >= 0 && v.cog < 360) ? v.cog : 0;
+  const dot = (v.sources || []).length >= 2
+    ? '<circle cx="5.5" cy="-5.5" r="2.4" fill="#00d4aa" stroke="#0d1117" stroke-width="0.6"/>' : '';
+
+  if (!selected) {
+    return L.divIcon({
+      html: '<svg width="24" height="24" viewBox="-8 -8 16 16" xmlns="http://www.w3.org/2000/svg">'
+          + '<g transform="rotate(' + rot + ')"><polygon points="0,-7 5,4 0,2 -5,4" fill="' + c + '" stroke="#0d1117" stroke-width="0.8"/></g>'
+          + dot + '</svg>',
+      className: '', iconSize: [24,24], iconAnchor: [12,12],
+    });
+  }
+  return L.divIcon({
+    html: '<div style="position:relative;width:32px;height:32px;display:flex;align-items:center;justify-content:center">'
+        + '<div class="marker-selected-ring"></div>'
+        + '<svg width="32" height="32" viewBox="-8 -8 16 16" xmlns="http://www.w3.org/2000/svg">'
+        + '<g transform="rotate(' + rot + ')"><polygon points="0,-7 5,4 0,2 -5,4" fill="' + c + '" stroke="#ffffff" stroke-width="1.2"/></g>'
+        + dot + '</svg></div>',
+    className: '', iconSize: [32,32], iconAnchor: [16,16],
+  });
+}
+
+function updateVessels(list) {
+  const seen = new Set(list.map(v => v.mmsi));
+  for (const v of list) {
+    let m = markers[v.mmsi];
+    if (!m) {
+      m = L.marker([v.lat, v.lon], { icon: vesselIcon(v, false) });
+      m.on('click', e => { L.DomEvent.stopPropagation(e); openVesselPanel(v.mmsi); });
+      clusterGroup.addLayer(m);
+      markers[v.mmsi] = m;
+    } else {
+      m.setLatLng([v.lat, v.lon]);
+    }
+    m._v     = v;
+    m._name  = (v.name || '').toLowerCase();
+    m._state = v.state || 'UNKNOWN';
+    m.setIcon(vesselIcon(v, v.mmsi === selectedMmsi));
+  }
+  for (const k of Object.keys(markers)) {
+    if (!seen.has(k)) { clusterGroup.removeLayer(markers[k]); delete markers[k]; }
+  }
+  updateZoneCounts(list);
+}
+
+// ── Vessel panel ─────────────────────────────────────────────────────────────
+const panel   = document.getElementById('vessel-panel');
+const vpBody  = document.getElementById('vp-body');
+const vpPhoto = document.getElementById('vp-photo');
+
+const SHIP_PLACEHOLDER = 'data:image/svg+xml,' + encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 170">'
+  + '<rect width="300" height="170" fill="#21262d"/>'
+  + '<g fill="#30363d">'
+  + '<path d="M80 110 L150 60 L220 110 Z"/>'
+  + '<rect x="130" y="60" width="40" height="30"/>'
+  + '<rect x="145" y="40" width="10" height="20"/>'
+  + '<rect x="60" y="110" width="180" height="20" rx="4"/>'
+  + '</g>'
+  + '<text x="150" y="155" text-anchor="middle" font-size="11" fill="#8b949e" font-family="monospace">No photo available</text>'
+  + '</svg>'
+);
+
+let trackLayer = null;
+function clearTrack() {
+  if (trackLayer) { map.removeLayer(trackLayer); trackLayer = null; }
+}
+
+function closePanel() {
+  panel.classList.remove('open');
+  clearTrack();
+  if (selectedMmsi && markers[selectedMmsi]) {
+    const m = markers[selectedMmsi];
+    m.setIcon(vesselIcon(m._v || {}, false));
+  }
+  selectedMmsi = null;
+}
+
+function openVesselPanel(mmsi) {
+  // Restore previous selected marker
+  if (selectedMmsi && markers[selectedMmsi]) {
+    const prev = markers[selectedMmsi];
+    prev.setIcon(vesselIcon(prev._v || {}, false));
+    prev.setOpacity(1);
+  }
+  selectedMmsi = mmsi;
+  clearTrack();
+  if (markers[mmsi]) {
+    const m = markers[mmsi];
+    m.setIcon(vesselIcon(m._v || {}, true));
+    m.setOpacity(1);
+    map.panTo(m.getLatLng(), { animate: true, duration: 0.4 });
+  }
+
+  vpBody.innerHTML = '<div id="vp-loading">Loading…</div>';
+  vpPhoto.src = SHIP_PLACEHOLDER;
+  panel.classList.add('open');
+
+  // Try MarineTraffic photo (informal but widely used)
+  const photoUrl = 'https://photos.marinetraffic.com/ais/showphoto.aspx?mmsi=' + mmsi;
+  vpPhoto.onerror = () => { vpPhoto.src = SHIP_PLACEHOLDER; vpPhoto.onerror = null; };
+  vpPhoto.src = photoUrl;
+
+  fetch('/api/vessels/' + mmsi)
+    .then(r => r.ok ? r.json() : Promise.reject(r.status))
+    .then(v => renderVesselPanel(v))
+    .catch(() => {
+      vpBody.innerHTML = '<div id="vp-error">Could not load vessel data.</div>';
+    });
+
+  // Track: polyline on the map + speed sparkline in the panel
+  fetch('/api/vessels/' + mmsi + '/track')
+    .then(r => r.ok ? r.json() : Promise.reject(r.status))
+    .then(t => {
+      if (selectedMmsi !== mmsi) return;
+      const pts = t.points || [];
+      if (pts.length > 1) {
+        clearTrack();
+        trackLayer = L.polyline(pts.map(p => [p.lat, p.lon]),
+          { color: '#00d4aa', weight: 2, opacity: .65 }).addTo(map);
+      }
+      const el = document.getElementById('vp-spark');
+      if (el) el.innerHTML = sparkline(pts);
+    })
+    .catch(() => {});
+}
+
+function sparkline(points) {
+  if (!points || points.length < 2) {
+    return '<span class="spark-max">no track data (6 h)</span>';
+  }
+  const w = 250, h = 36;
+  const max = Math.max(...points.map(p => p.sog), 1);
+  const step = w / (points.length - 1);
+  const coords = points.map((p, i) =>
+    (i * step).toFixed(1) + ',' + (h - 2 - (p.sog / max) * (h - 6)).toFixed(1)
+  ).join(' ');
+  return '<svg width="' + w + '" height="' + h + '">'
+    + '<polyline points="' + coords + '" fill="none" stroke="#00d4aa" stroke-width="1.5"/>'
+    + '</svg>'
+    + '<div class="spark-max">max ' + max.toFixed(1) + ' kn · last 6 h</div>';
+}
+
+function ago(iso) {
+  if (!iso) return '—';
+  const s = Math.floor((Date.now() - new Date(iso)) / 1000);
+  if (s < 60) return s + 's ago';
+  if (s < 3600) return Math.floor(s/60) + 'm ago';
+  if (s < 86400) return Math.floor(s/3600) + 'h ago';
+  return Math.floor(s/86400) + 'd ago';
+}
+
+// ≥2 sources in the consensus window → corroborated (teal ◈), else single/stale
+function sourcesHtml(srcs) {
+  srcs = srcs || [];
+  if (srcs.length >= 2) return '<span class="src-multi">◈ ' + esc(srcs.join(' + ')) + ' (corroborated)</span>';
+  if (srcs.length === 1) return '<span class="src-single">' + esc(srcs[0]) + ' (single source)</span>';
+  return '<span class="src-single">none in last 5 min</span>';
+}
+
+function renderVesselPanel(v) {
+  const flag    = flagEmoji(v.flagState);
+  const stCls   = 'state-badge state-' + (v.state || 'UNKNOWN');
+  const stLabel = v.state || 'Unknown';
+
+  const eventsHtml = (v.recentEvents || []).map(e => {
+    const col = ETYPE_COLOR[e.event_type] || '#8b949e';
+    const ts  = new Date(e.timestamp).toLocaleDateString('en-GB', { day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' });
+    return '<div class="vp-tl-item">'
+      + '<span class="tl-dot" style="background:' + col + '"></span>'
+      + '<span class="ve-type" style="color:' + col + '">' + (ICONS[e.event_type]||'•') + ' ' + esc(e.event_type.replace(/_/g,' ')) + '</span>'
+      + '<span class="ve-conf">' + Number(e.confidence).toFixed(0) + '% · ' + ts + '</span>'
+      + '</div>';
+  }).join('');
+
+  const mtUrl = 'https://www.marinetraffic.com/en/ais/details/ships/mmsi:' + v.mmsi;
+
+  vpBody.innerHTML =
+    '<div id="vp-name">' + flag + ' ' + esc(v.name || 'Unknown vessel') + '</div>'
+    + '<div id="vp-sub">MMSI ' + esc(v.mmsi) + (v.imo ? ' · IMO ' + esc(v.imo) : '') + '</div>'
+    + '<div class="vp-grid">'
+    +   '<div class="vp-field"><label>Type</label><span>' + shipTypeLabel(v.shipType) + '</span></div>'
+    +   '<div class="vp-field"><label>State</label><span class="' + stCls + '">' + esc(stLabel) + '</span></div>'
+    +   '<div class="vp-field"><label>Flag</label><span>' + (flag ? flag + ' ' + esc(v.flagState||'') : '—') + '</span></div>'
+    +   '<div class="vp-field"><label>Voyages</label><span>' + (v.voyageCount || '0') + '</span></div>'
+    +   '<div class="vp-field"><label>First seen</label><span>' + ago(v.firstSeen) + '</span></div>'
+    +   '<div class="vp-field"><label>Last seen</label><span>' + ago(v.lastSeen) + '</span></div>'
+    +   '<div class="vp-field" style="grid-column:1/-1"><label>Sources (5 min)</label><span>' + sourcesHtml(v.sources) + '</span></div>'
+    +   '<div class="vp-field" style="grid-column:1/-1"><label>Speed profile</label><div id="vp-spark"><span class="spark-max">loading track…</span></div></div>'
+    + '</div>'
+    + (eventsHtml ? '<div id="vp-events-hdr">Recent events</div><div class="vp-timeline">' + eventsHtml + '</div>' : '')
+    + '<a id="vp-mt-link" href="' + mtUrl + '" target="_blank" rel="noopener">View on MarineTraffic ↗</a>';
+}
+
+// ── Stats ────────────────────────────────────────────────────────────────────
+function agoShort(iso) {
+  if (!iso) return '—';
+  const s = Math.floor((Date.now() - new Date(iso)) / 1000);
+  return s < 60 ? s + 's ago' : s < 3600 ? Math.floor(s/60) + 'm ago' : Math.floor(s/3600) + 'h ago';
+}
+
+async function poll() {
+  try {
+    const d = await fetch('/api/live').then(r => r.json());
+    updateVessels(d.vessels || []);
+    document.getElementById('s-today').textContent   = d.stats?.today   ?? '0';
+    document.getElementById('s-vessels').textContent = d.stats?.active_1h ?? '0';
+    document.getElementById('s-multi').textContent   = (d.vessels || []).filter(v => (v.sources || []).length >= 2).length;
+    document.getElementById('s-anchor').textContent  = agoShort(d.stats?.last_anchor);
+  } catch {}
+}
+poll(); setInterval(poll, 10000);
+
+// ── Search + filter ───────────────────────────────────────────────────────────
+let activeType   = 'ALL';
+let searchText   = '';
+
+const searchInput = document.getElementById('search-input');
+const searchClear = document.getElementById('search-clear');
+const noResults   = document.getElementById('no-results');
+
+function typeMatchesPill(cardType, pillType) {
+  if (pillType === 'ALL') return true;
+  if (pillType === 'ANCHORAGE') return cardType === 'ANCHORAGE_START' || cardType === 'ANCHORAGE_END';
+  return cardType === pillType;
+}
+
+function cardMatches(card) {
+  const type  = card.dataset.type  || '';
+  const name  = (card.dataset.name  || '').toLowerCase();
+  const mmsi  = card.dataset.mmsi  || '';
+  if (!typeMatchesPill(type, activeType)) return false;
+  if (searchText && !name.includes(searchText) && !mmsi.includes(searchText)) return false;
+  return true;
+}
+
+function applyFilters() {
+  const cards = feedList.querySelectorAll('.card');
+  let visible = 0;
+  cards.forEach(c => {
+    const show = cardMatches(c);
+    c.classList.toggle('hidden', !show);
+    if (show) visible++;
+  });
+  noResults.style.display = (visible === 0 && cards.length > 0) ? 'block' : 'none';
+
+  // Dim map markers that don't match search
+  if (searchText) {
+    for (const [mmsi, marker] of Object.entries(markers)) {
+      const vname = (marker._name || '').toLowerCase();
+      const match = vname.includes(searchText) || mmsi.includes(searchText);
+      marker.setOpacity(match ? 1 : 0.2);
+    }
+  } else {
+    for (const marker of Object.values(markers)) marker.setOpacity(1);
+  }
+}
+
+// Type pills
+document.getElementById('type-pills').addEventListener('click', e => {
+  const pill = e.target.closest('.pill');
+  if (!pill) return;
+  document.querySelectorAll('.pill').forEach(p => p.classList.remove('active'));
+  pill.classList.add('active');
+  activeType = pill.dataset.type;
+  applyFilters();
+});
+
+// Search input
+searchInput.addEventListener('input', () => {
+  searchText = searchInput.value.trim().toLowerCase();
+  searchClear.style.display = searchText ? 'block' : 'none';
+  applyFilters();
+});
+searchClear.addEventListener('click', () => {
+  searchInput.value = '';
+  searchText = '';
+  searchClear.style.display = 'none';
+  applyFilters();
+});
+
+// ── Event detail modal ───────────────────────────────────────────────────────
+const evtModal     = document.getElementById('evt-modal');
+const evtModalCard = document.getElementById('evt-modal-card');
+let evidenceLayer  = null;
+let currentDetail  = null;
+
+const COMP_LABELS = {
+  message_density:       'Message density',
+  kinematic_consistency: 'Kinematic consistency',
+  transponder_history:   'Transponder history',
+  source_quality:        'Source quality',
+  source_corroboration:  'Source corroboration',
+};
+
+function clearEvidence() {
+  if (evidenceLayer) { map.removeLayer(evidenceLayer); evidenceLayer = null; }
+}
+
+function closeEventModal() { evtModal.classList.add('hidden'); }
+
+evtModal.addEventListener('click', e => { if (e.target === evtModal) closeEventModal(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeEventModal(); });
+
+function copyText(btn, text) {
+  navigator.clipboard.writeText(text).then(() => {
+    const old = btn.textContent;
+    btn.textContent = '✓';
+    setTimeout(() => { btn.textContent = old; }, 1200);
+  });
+}
+
+function hashRow(label, value) {
+  if (!value) return '';
+  return '<div class="hash-row"><span class="hk">' + label + '</span>'
+    + '<span class="hash-val" title="' + esc(value) + '">' + esc(value) + '</span>'
+    + '<button class="copy-btn" data-copy="' + esc(value) + '">copy</button></div>';
+}
+
+function openEventModal(id) {
+  fetch('/api/events/' + encodeURIComponent(id))
+    .then(r => r.ok ? r.json() : Promise.reject(r.status))
+    .then(ev => renderEventModal(ev))
+    .catch(() => {});
+}
+
+function renderEventModal(ev) {
+  currentDetail = ev;
+  const col   = ETYPE_COLOR[ev.type] || '#8b949e';
+  const bd    = ev.breakdown || {};
+  const evd   = ev.evidence  || {};
+  const corr  = evd.corroboration_sources || [];
+  const ts    = new Date(ev.ts).toLocaleString('en-GB');
+
+  const bars = Object.keys(COMP_LABELS).map(k => {
+    const val = Number(bd[k] ?? 0);
+    return '<div class="bar-row">'
+      + '<div class="bar-label"><span>' + COMP_LABELS[k] + '</span><b>' + val.toFixed(0) + '</b></div>'
+      + '<div class="bar-track"><div class="bar-fill" style="width:' + Math.min(val, 100) + '%"></div></div>'
+      + '</div>';
+  }).join('');
+
+  const srcTag = corr.length >= 2
+    ? '<span class="src-multi">◈ ' + esc(corr.join(' + ')) + ' (corroborated)</span>'
+    : '<span class="src-single">' + esc(corr.join(', ') || '—') + ' (single source)</span>';
+
+  const anchorHtml = ev.anchor
+    ? hashRow('Batch',  ev.anchor.batchId)
+      + hashRow('Merkle root', ev.anchor.merkleRoot)
+      + hashRow('Tx hash',     ev.anchor.txHash)
+      + '<div class="hash-row"><span class="hk">Proof</span><span class="em-muted">'
+      + (ev.anchor.proof || []).length + ' node(s)</span></div>'
+    : '<div class="em-muted">⏳ Not anchored yet — batches are anchored hourly.</div>';
+
+  const nPos = (evd.positions_window || []).length;
+
+  evtModalCard.innerHTML =
+    '<button id="em-close">✕</button>'
+    + '<div class="em-title" style="color:' + col + '">' + (ICONS[ev.type]||'•') + ' ' + esc(ev.type.replace(/_/g,' ')) + ' · ' + esc(ev.port) + '</div>'
+    + '<div class="em-sub">' + esc(ev.vessel.name || 'Unknown') + ' · MMSI ' + esc(ev.vessel.mmsi)
+    + (ev.vessel.imo ? ' · IMO ' + esc(ev.vessel.imo) : '') + '<br>' + ts + '</div>'
+    + '<div class="em-hdr">Confidence — ' + Number(ev.confidence).toFixed(1) + '%</div>'
+    + bars
+    + '<div class="em-hdr">Sources</div>' + srcTag
+    + '<div class="em-hdr">On-chain anchor</div>' + anchorHtml
+    + hashRow('Signature', ev.signature)
+    + (nPos ? '<button class="em-btn" id="em-evidence">Show ' + nPos + ' evidence positions on map</button>' : '');
+
+  evtModalCard.querySelector('#em-close').addEventListener('click', closeEventModal);
+  evtModalCard.querySelectorAll('.copy-btn').forEach(b =>
+    b.addEventListener('click', () => copyText(b, b.dataset.copy)));
+  const evBtn = evtModalCard.querySelector('#em-evidence');
+  if (evBtn) evBtn.addEventListener('click', showEvidence);
+
+  evtModal.classList.remove('hidden');
+}
+
+function showEvidence() {
+  const ev = currentDetail;
+  if (!ev) return;
+  closeEventModal();
+  clearEvidence();
+  const pts = (ev.evidence && ev.evidence.positions_window) || [];
+  if (!pts.length) return;
+  evidenceLayer = L.layerGroup(pts.map(p =>
+    L.circleMarker([p.lat, p.lon], { radius: 4, color: '#00d4aa', weight: 1, fillOpacity: .6 })
+      .bindPopup(new Date(p.time).toLocaleTimeString('en-GB') + ' · SOG ' + p.sog + ' kn')
+  )).addTo(map);
+  map.flyToBounds(L.latLngBounds(pts.map(p => [p.lat, p.lon])).pad(0.6), { duration: 1 });
+}
+
+// ── SSE Feed ─────────────────────────────────────────────────────────────────
+let total = 0;
+const feedList = document.getElementById('feed-list');
+const cntEl    = document.getElementById('evt-count');
+
+function badgeClass(c) { return c >= 75 ? 'hi' : c >= 50 ? 'md' : 'lo'; }
+
+function addEvent(e) {
+  total++;
+  cntEl.textContent = total;
+  const ts   = new Date(e.ts).toLocaleTimeString('en-GB', { hour12: false });
+  const icon = ICONS[e.type] || '•';
+  const conf = Number(e.conf).toFixed(1);
+  const srcs = (e.corroborationSources || []);
+  const srcTag = srcs.length >= 2
+    ? '<span class="src-multi">◈ ' + esc(srcs.join(' + ')) + '</span>'
+    : srcs.length === 1 ? '<span class="src-single">' + esc(srcs[0]) + '</span>' : '';
+
+  const el = document.createElement('div');
+  el.className = 'card';
+  el.dataset.type = e.type;
+  el.dataset.name = (e.name || '').toLowerCase();
+  el.dataset.mmsi = e.mmsi;
+  el.dataset.id   = e.id;
+  if (!cardMatches(el)) el.classList.add('hidden');
+  el.innerHTML =
+    '<div class="r1">'
+    + '<span class="etype ' + e.type + '">' + icon + ' ' + esc(e.type.replace(/_/g,' ')) + '</span>'
+    + '<span class="badge ' + badgeClass(e.conf) + '">' + conf + '%</span>'
+    + '</div>'
+    + '<div class="r2">'
+    + '<span class="vname" data-mmsi="' + esc(e.mmsi) + '">' + esc(e.name || 'Unknown') + '</span>'
+    + '<span class="mmsi">' + esc(e.mmsi) + '</span>'
+    + '</div>'
+    + '<div class="r3">'
+    + '<span>' + ts + ' · ' + esc(e.port) + '</span>'
+    + '<span>'
+    + (e.anchored ? '<span class="chain">⛓ &nbsp;</span>' : '')
+    + srcTag
+    + '</span>'
+    + '</div>';
+
+  // Click on vessel name → vessel panel; click anywhere else → event detail
+  el.querySelector('.vname').addEventListener('click', function(ev) {
+    ev.stopPropagation();
+    openVesselPanel(this.dataset.mmsi);
+  });
+  el.addEventListener('click', () => openEventModal(el.dataset.id));
+
+  feedList.insertBefore(el, feedList.firstChild);
+  while (feedList.children.length > 101) feedList.removeChild(feedList.lastChild); // +1 for #no-results
+  // Update "no results" visibility
+  const visible = feedList.querySelectorAll('.card:not(.hidden)').length;
+  noResults.style.display = (visible === 0) ? 'block' : 'none';
+}
+
+const dot   = document.getElementById('live-dot');
+const label = document.getElementById('live-label');
+
+(function connect() {
+  const es = new EventSource('/stream/events');
+  es.onopen    = () => { dot.className = 'on'; label.textContent = 'live'; };
+  es.onmessage = e => { try { addEvent(JSON.parse(e.data)); } catch {} };
+  es.onerror   = () => {
+    dot.className = ''; label.textContent = 'reconnecting…';
+    es.close(); setTimeout(connect, 3000);
+  };
+})();
+</script>
+</body>
+</html>

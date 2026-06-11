@@ -3,9 +3,9 @@ import { createHash } from 'crypto'
 import { query } from './db.js'
 
 // Routes accessible without an API key
-const PUBLIC_PATHS = new Set(['/', '/stream/events', '/api/live', '/api/geo/rotterdam', '/api/geo/ports-fr', '/health', '/verify'])
-// Prefix-matched public routes (vessel detail panel uses these from the browser)
-const PUBLIC_PREFIXES = ['/api/vessels/']
+const PUBLIC_PATHS = new Set(['/', '/stream/events', '/api/live', '/api/geo/rotterdam', '/api/geo/ports-fr', '/api/geo/ports-baltic', '/health', '/verify'])
+// Prefix-matched public routes (vessel detail panel + event modal use these from the browser)
+const PUBLIC_PREFIXES = ['/api/vessels/', '/api/events/']
 
 // In-memory sliding window: keyId → { windowStart, count }
 const rateLimitWindows = new Map<string, { windowStart: number; count: number }>()
