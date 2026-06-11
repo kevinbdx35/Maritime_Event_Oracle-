@@ -1,5 +1,7 @@
 # Maritime Event Oracle
 
+**Version 0.2.0** — multi-source consensus, multi-port coverage (Rotterdam · France · Gulf of Finland)
+
 A business API that **certifies maritime events** — port arrivals, departures, anchorages, and AIS gaps — with explainable confidence scores and hourly Merkle anchoring on Base Sepolia testnet.
 
 **Target clients:** sanctions compliance (banks, P&I clubs), parametric insurance, trade finance, decarbonisation verifiers (Katalist / Book & Claim).
@@ -15,7 +17,7 @@ A business API that **certifies maritime events** — port arrivals, departures,
 5. **Signs** every event with an Ed25519 key — unforgeable without the private key.
 6. **Anchors** hourly batches on-chain via a Merkle root — immutable once confirmed.
 7. **Tracks** full voyages: geodesic distance, speed profile, time breakdown (underway / anchored / moored).
-8. **Serves** a REST API (with API-key auth) and a live Leaflet dashboard showing per-vessel source corroboration.
+8. **Serves** a REST API (with API-key auth) and a live Leaflet dashboard: multi-zone navigation, course-oriented markers with corroboration badges, vessel tracks + speed sparklines, and per-event confidence/Merkle-proof inspection.
 
 ---
 
@@ -78,6 +80,20 @@ scripts/
 fixtures/
   rotterdam-scenario.ndjson  600 AIS messages, 8 vessels, 4 port calls
 ```
+
+---
+
+## Coverage
+
+| Region | Port zones | Anchorages | Sources |
+|---|---|---|---|
+| **Rotterdam** | NLRTM | Maas anchorages | AISStream |
+| **France — Channel** | Le Havre, Rouen, Dunkerque, Calais, Saint-Malo | Rade de Cherbourg | AISStream |
+| **France — Atlantic** | Nantes, Saint-Nazaire, La Rochelle, Bordeaux, Lorient, Quiberon | Rade de Brest, Golfe du Morbihan | AISStream |
+| **France — Mediterranean** | Marseille, Fos-sur-Mer | — | AISStream |
+| **Gulf of Finland** | Helsinki (FIHEL), Tallinn (EETLL) | — | AISStream + Digitraffic — **dual-source corroborated events** |
+
+Event `port` codes are resolved from the position window via `portFor()` (UN/LOCODE per zone polygon). Zone polygons live in `packages/core/src/geo/*.geojson` — adding a port is one GeoJSON feature.
 
 ---
 
@@ -188,7 +204,10 @@ pnpm create-key "my-client" read 200
 | `GET` | `/api/live` | public | Current vessel positions, active sources per vessel + stats |
 | `GET` | `/api/geo/rotterdam` | public | Rotterdam port/anchorage GeoJSON |
 | `GET` | `/api/geo/ports-fr` | public | French ports GeoJSON |
+| `GET` | `/api/geo/ports-baltic` | public | Baltic ports GeoJSON (dual-source consensus zone) |
 | `GET` | `/api/vessels/:mmsi` | public | Vessel detail: state, recent events, active sources (5-min window) |
+| `GET` | `/api/vessels/:mmsi/track` | public | 6-hour track, 2-min buckets (dashboard trail + speed sparkline) |
+| `GET` | `/api/events/:id` | public | Event detail: confidence breakdown, evidence, Merkle proof (dashboard modal) |
 | `GET` | `/events` | key | Paginated event list (`type`, `mmsi`, `from`, `to`, `limit`, `cursor`) |
 | `GET` | `/events/:id` | key | Single event with full Merkle proof |
 | `GET` | `/vessels/:mmsi/events` | key | Events for a specific vessel |
@@ -369,11 +388,10 @@ Then add one import + one entry to `REGISTRY` in `apps/ingestor/src/connectors/r
 | Feature | Description |
 |---|---|
 | Satellite AIS | Integrate Spire/exactEarth; lower `source_quality` score (higher latency) |
-| Helsinki port zone | FIHEL polygons — AISStream + Digitraffic both cover the Gulf of Finland, enabling the first dual-source corroborated events |
 | STS transfer detection | Ship-to-ship transfers via proximity + simultaneous low speed |
 | AIS spoofing detection | Cross-check trajectory against Kalman-filter prediction |
 | Chainlink adapter | Live parametric insurance pay-outs on arrival delay |
-| Multi-port | Beyond Rotterdam; parameterise polygons per port |
+| More ports | Mediterranean & Iberian coverage; per-port FSM tuning |
 | Base Mainnet | Migrate from Sepolia; add multi-sig anchor submission |
 | MMSI/IMO verification | Cross-reference Lloyd's Register / IHS Markit |
 
