@@ -62,7 +62,7 @@ export async function dashboardRoutes(app: FastifyInstance): Promise<void> {
   // Vessel detail — used by the dashboard panel (public route)
   app.get<{ Params: { mmsi: string } }>('/api/vessels/:mmsi', async (req, reply) => {
     const { mmsi } = req.params
-    const [vesselRes, stateRes, eventsRes, voyRes] = await Promise.all([
+    const [vesselRes, stateRes, eventsRes, voyRes, srcRes] = await Promise.all([
       query<{
         mmsi: string; imo: string | null; name: string | null
         ship_type: number | null; flag_state: string | null
@@ -73,6 +73,10 @@ export async function dashboardRoutes(app: FastifyInstance): Promise<void> {
         'SELECT event_type, timestamp, confidence FROM events WHERE mmsi = $1 ORDER BY timestamp DESC LIMIT 8', [mmsi],
       ),
       query<{ n: string }>('SELECT COUNT(*) AS n FROM voyages WHERE mmsi = $1 AND period_to IS NOT NULL', [mmsi]),
+      query<{ sources: string[] | null }>(
+        // 5-min window — must match the consensus gate's corroboration window
+        "SELECT array_agg(DISTINCT source) AS sources FROM positions WHERE mmsi = $1 AND time > NOW() - INTERVAL '5 minutes'", [mmsi],
+      ),
     ])
 
     const vessel = vesselRes.rows[0]
@@ -89,6 +93,7 @@ export async function dashboardRoutes(app: FastifyInstance): Promise<void> {
       state:        stateRes.rows[0]?.state ?? null,
       recentEvents: eventsRes.rows,
       voyageCount:  parseInt(voyRes.rows[0]?.n ?? '0'),
+      sources:      srcRes.rows[0]?.sources ?? [],
     }
   })
 
@@ -96,10 +101,17 @@ export async function dashboardRoutes(app: FastifyInstance): Promise<void> {
     const [vessels, stats] = await Promise.all([
       query(`
         SELECT DISTINCT ON (p.mmsi)
-          p.mmsi, p.lat, p.lon, p.sog, p.cog, v.name, vs.state
+          p.mmsi, p.lat, p.lon, p.sog, p.cog, v.name, vs.state, src.sources
         FROM positions p
         LEFT JOIN vessels v ON v.mmsi = p.mmsi
         LEFT JOIN vessel_states vs ON vs.mmsi = p.mmsi
+        LEFT JOIN (
+          -- 5-min window — must match the consensus gate's corroboration window
+          SELECT mmsi, array_agg(DISTINCT source) AS sources
+          FROM positions
+          WHERE time > NOW() - INTERVAL '5 minutes'
+          GROUP BY mmsi
+        ) src ON src.mmsi = p.mmsi
         WHERE p.time > NOW() - INTERVAL '2 hours'
         ORDER BY p.mmsi, p.time DESC
       `),
@@ -395,6 +407,7 @@ const DASHBOARD_HTML = `<!DOCTYPE html>
 <div id="footer">
   <span>Events today: <b id="s-today">—</b></span>
   <span>Active vessels (1h): <b id="s-vessels">—</b></span>
+  <span>Multi-source: <b id="s-multi">—</b></span>
   <span>Last anchor: <b id="s-anchor">—</b></span>
 </div>
 
@@ -485,6 +498,14 @@ function openVesselPanel(mmsi) {
     });
 }
 
+// ≥2 sources in the consensus window → corroborated (teal ◈), else single/stale
+function sourcesHtml(srcs) {
+  srcs = srcs || [];
+  if (srcs.length >= 2) return '<span class="src-multi">◈ ' + srcs.join(' + ') + ' (corroborated)</span>';
+  if (srcs.length === 1) return '<span class="src-single">' + srcs[0] + ' (single source)</span>';
+  return '<span class="src-single">none in last 5 min</span>';
+}
+
 function ago(iso) {
   if (!iso) return '—';
   const s = Math.floor((Date.now() - new Date(iso)) / 1000);
@@ -521,6 +542,7 @@ function renderVesselPanel(v) {
     +   '<div class="vp-field"><label>Voyages</label><span>' + (v.voyageCount || '0') + '</span></div>'
     +   '<div class="vp-field"><label>First seen</label><span>' + ago(v.firstSeen) + '</span></div>'
     +   '<div class="vp-field"><label>Last seen</label><span>' + ago(v.lastSeen) + '</span></div>'
+    +   '<div class="vp-field" style="grid-column:1/-1"><label>Sources (5 min)</label><span>' + sourcesHtml(v.sources) + '</span></div>'
     + '</div>'
     + (eventsHtml ? '<div id="vp-events-hdr">Recent events</div>' + eventsHtml : '')
     + '<a id="vp-mt-link" href="' + mtUrl + '" target="_blank" rel="noopener">View on MarineTraffic ↗</a>';
@@ -626,6 +648,7 @@ async function poll() {
     updateVessels(d.vessels || []);
     document.getElementById('s-today').textContent   = d.stats?.today   ?? '0';
     document.getElementById('s-vessels').textContent = d.stats?.active_1h ?? '0';
+    document.getElementById('s-multi').textContent   = (d.vessels || []).filter(v => (v.sources || []).length >= 2).length;
     document.getElementById('s-anchor').textContent  = agoShort(d.stats?.last_anchor);
   } catch {}
 }
