@@ -71,6 +71,14 @@ export async function loadVesselStates(): Promise<Map<string, { state: VesselSta
   return map
 }
 
+export async function loadShipTypes(): Promise<Map<string, number>> {
+  const result = await query<{ mmsi: string; ship_type: number }>(
+    `SELECT mmsi, ship_type FROM vessels
+     WHERE ship_type IS NOT NULL AND last_seen > now() - interval '48 hours'`
+  )
+  return new Map(result.rows.map(r => [r.mmsi, r.ship_type]))
+}
+
 export async function updateEventAnchor(
   eventId: string,
   batchId: string,

@@ -22,16 +22,20 @@ function pos(mmsi: string, time: Date, lat: number, lon: number, sog = 0.2): Pos
   return { mmsi, time, lat, lon, sog, cog: 0, source: 'test' }
 }
 
+// Tanker — eligible ship type for STS pairing
+const TANKER = 80
+
 describe('StsDetector', () => {
   let det: StsDetector
   beforeEach(() => { det = new StsDetector() })
 
-  // Feed both vessels every 5 min (stays under the 10-min staleness TTL)
-  function runPair(latA: number, lonA: number, latB: number, lonB: number, minutes: number) {
+  // Feed both vessels every 5 min (stays under the 10-min staleness TTL).
+  // null ship type means "never known" (undefined would trigger the default)
+  function runPair(latA: number, lonA: number, latB: number, lonB: number, minutes: number, typeA: number | null = TANKER, typeB: number | null = TANKER, fromMin = 0) {
     const all = []
-    for (let m = 0; m <= minutes; m += 5) {
-      all.push(...det.update(pos('111111111', min(m), latA, lonA)))
-      all.push(...det.update(pos('222222222', min(m), latB, lonB)))
+    for (let m = fromMin; m <= fromMin + minutes; m += 5) {
+      all.push(...det.update(pos('111111111', min(m), latA, lonA), typeA ?? undefined))
+      all.push(...det.update(pos('222222222', min(m), latB, lonB), typeB ?? undefined))
     }
     return all
   }
@@ -71,12 +75,12 @@ describe('StsDetector', () => {
   it('resets the pair when one vessel gets underway', () => {
     runPair(SEA_LAT, SEA_LON, SEA_LAT + NEARBY, SEA_LON, 20)
     // vessel B sails off at t+25
-    det.update(pos('222222222', min(25), SEA_LAT + NEARBY, SEA_LON, 8.0))
+    det.update(pos('222222222', min(25), SEA_LAT + NEARBY, SEA_LON, 8.0), TANKER)
     // both stationary again — episode must restart from zero
     const hits = []
     for (let m = 30; m <= 50; m += 5) {
-      hits.push(...det.update(pos('111111111', min(m), SEA_LAT, SEA_LON)))
-      hits.push(...det.update(pos('222222222', min(m), SEA_LAT + NEARBY, SEA_LON)))
+      hits.push(...det.update(pos('111111111', min(m), SEA_LAT, SEA_LON), TANKER))
+      hits.push(...det.update(pos('222222222', min(m), SEA_LAT + NEARBY, SEA_LON), TANKER))
     }
     expect(hits).toHaveLength(0)
   })
@@ -84,6 +88,50 @@ describe('StsDetector', () => {
   it('ignores vessels far apart', () => {
     // ~1.1 km apart
     const hits = runPair(SEA_LAT, SEA_LON, SEA_LAT + 0.01, SEA_LON, 60)
+    expect(hits).toHaveLength(0)
+  })
+
+  it('ignores ineligible ship types (tug rafted to a tanker)', () => {
+    const hits = runPair(SEA_LAT, SEA_LON, SEA_LAT + NEARBY, SEA_LON, 60, 52, TANKER)
+    expect(hits).toHaveLength(0)
+  })
+
+  it('ignores vessels whose ship type is unknown', () => {
+    const hits = runPair(SEA_LAT, SEA_LON, SEA_LAT + NEARBY, SEA_LON, 60, null, TANKER)
+    expect(hits).toHaveLength(0)
+  })
+
+  it('remembers a ship type seen earlier in the episode', () => {
+    // type arrives on the first fix only (static message), then position-only fixes
+    det.update(pos('111111111', min(0), SEA_LAT, SEA_LON), TANKER)
+    det.update(pos('222222222', min(0), SEA_LAT + NEARBY, SEA_LON), TANKER)
+    const hits = []
+    for (let m = 5; m <= 35; m += 5) {
+      hits.push(...det.update(pos('111111111', min(m), SEA_LAT, SEA_LON)))
+      hits.push(...det.update(pos('222222222', min(m), SEA_LAT + NEARBY, SEA_LON)))
+    }
+    expect(hits).toHaveLength(1)
+  })
+
+  it('does not re-report a pair within the 6 h cooldown even after a state reset', () => {
+    const first = runPair(SEA_LAT, SEA_LON, SEA_LAT + NEARBY, SEA_LON, 35)
+    expect(first).toHaveLength(1)
+    // 15-min coverage hole > position TTL — stationary + pair state get purged
+    const again = runPair(SEA_LAT, SEA_LON, SEA_LAT + NEARBY, SEA_LON, 60, TANKER, TANKER, 50)
+    expect(again).toHaveLength(0)
+  })
+
+  it('reports the same pair again once the cooldown has expired', () => {
+    const first = runPair(SEA_LAT, SEA_LON, SEA_LAT + NEARBY, SEA_LON, 35)
+    expect(first).toHaveLength(1)
+    // next episode starts 7 h later — past the 6 h cooldown
+    const again = runPair(SEA_LAT, SEA_LON, SEA_LAT + NEARBY, SEA_LON, 35, TANKER, TANKER, 7 * 60)
+    expect(again).toHaveLength(1)
+  })
+
+  it('treats the Rotterdam city basins (Maashaven) as in-port', () => {
+    // Rafted inland barges in the Maashaven were the main source of false positives
+    const hits = runPair(51.8999, 4.4903, 51.9000, 4.4894, 60)
     expect(hits).toHaveLength(0)
   })
 })

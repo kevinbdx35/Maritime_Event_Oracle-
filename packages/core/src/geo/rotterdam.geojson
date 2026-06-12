@@ -1,5 +1,5 @@
 {
-  "_comment": "Rotterdam port zones. Port polygon derived from OpenStreetMap (© OpenStreetMap contributors, ODbL) relation #47696 + Maasvlakte terminals. Anchorage zones from Dutch Hydrographic Office (NLHO) chart 1801. Last verified 2024-01.",
+  "_comment": "Rotterdam port zones. Port polygon derived from OpenStreetMap (© OpenStreetMap contributors, ODbL) relation #47696 + Maasvlakte terminals, extended 2026-06 to cover the city basins (Eemhaven, Waalhaven, Maashaven, Rijnhaven) where rafted inland barges caused STS false positives. Anchorage zones from Dutch Hydrographic Office (NLHO) chart 1801.",
   "type": "FeatureCollection",
   "features": [
     {
@@ -15,10 +15,11 @@
           [4.1200, 51.9700],
           [4.2000, 51.9500],
           [4.2800, 51.9300],
-          [4.3500, 51.9100],
-          [4.4200, 51.8900],
-          [4.4800, 51.8700],
-          [4.5200, 51.8500],
+          [4.3500, 51.9250],
+          [4.4200, 51.9200],
+          [4.4800, 51.9150],
+          [4.5200, 51.9100],
+          [4.5400, 51.8800],
           [4.5400, 51.8200],
           [4.5300, 51.8000],
           [4.5000, 51.7900],

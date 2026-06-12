@@ -14,7 +14,7 @@ import {
 import type { AISMessage, MaritimeEvent, PositionRecord } from '@maritime/core'
 import {
   upsertVessel, insertPosition, insertEvent,
-  saveVesselState, loadVesselStates,
+  saveVesselState, loadVesselStates, loadShipTypes,
 } from './db/repository.js'
 import { EventEmitter } from 'events'
 import { corroborationTracker } from './corroboration.js'
@@ -27,6 +27,8 @@ const SIGNING_KEY = process.env['EVT_SIGNING_KEY'] ?? ''
 // In-memory FSM registry
 const machines = new Map<string, VesselStateMachine>()
 const trackingSince = new Map<string, Date>()
+// Ship types arrive on AIS static messages only — cache them for the STS detector
+const shipTypes = new Map<string, number>()
 
 const eventBus = new EventEmitter()
 export { eventBus }
@@ -60,7 +62,8 @@ export async function initProcessor(): Promise<void> {
     machines.set(mmsi, new VesselStateMachine(mmsi, state))
     trackingSince.set(mmsi, new Date(Date.now() - trackingSinceMinutes * 60_000))
   }
-  console.log(`[processor] restored ${machines.size} vessel states`)
+  for (const [mmsi, type] of await loadShipTypes()) shipTypes.set(mmsi, type)
+  console.log(`[processor] restored ${machines.size} vessel states, ${shipTypes.size} ship types`)
 }
 
 export async function processRaw(raw: unknown): Promise<void> {
@@ -77,6 +80,7 @@ export async function processMessage(msg: AISMessage): Promise<void> {
 
   // Upsert vessel metadata (with flag state derived from MMSI)
   await upsertVessel(mmsi, msg.imo, msg.name, msg.shipType, flagStateFromMmsi(mmsi))
+  if (msg.shipType !== undefined) shipTypes.set(mmsi, msg.shipType)
 
   const pos: PositionRecord = { mmsi, time, lat: msg.lat, lon: msg.lon, sog: msg.sog, cog: msg.cog, source: msg.source }
   if (msg.heading !== undefined) pos.heading = msg.heading
@@ -102,7 +106,7 @@ export async function processMessage(msg: AISMessage): Promise<void> {
   // STS + spoofing detectors (independent of the FSM)
   const corroboration = corroborationTracker.getActiveSources(mmsi)
 
-  for (const sts of stsDetector.update(pos)) {
+  for (const sts of stsDetector.update(pos, shipTypes.get(mmsi))) {
     const evtInput: EventBuildInput = {
       mmsi, type: 'STS_TRANSFER', timestamp: sts.detectedAt,
       positions: [pos], corroborationSources: corroboration,
