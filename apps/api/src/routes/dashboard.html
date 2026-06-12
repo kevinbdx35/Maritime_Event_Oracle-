@@ -116,6 +116,19 @@
   #feed-list  { overflow-y: auto; flex: 1; padding: 8px; }
   .card.hidden { display: none; }
   #no-results { display: none; text-align: center; color: var(--muted); font-size: 12px; padding: 24px 0; }
+  #new-banner {
+    display: none; margin: 8px 8px 0; padding: 5px; text-align: center; font-size: 11px;
+    color: var(--teal); background: var(--bg3); border: 1px solid var(--teal);
+    border-radius: 4px; cursor: pointer; flex-shrink: 0;
+  }
+  #new-banner:hover { background: var(--bg); }
+  #mmsi-hint {
+    display: none; width: 100%; margin-top: 4px; padding: 6px; text-align: center;
+    font-size: 11px; color: var(--blue); background: var(--bg3);
+    border: 1px solid var(--border); border-radius: 4px; cursor: pointer; font-family: var(--mono);
+  }
+  #mmsi-hint:hover { border-color: var(--blue); }
+  #s-updated.stale { color: var(--red); }
 
   .card {
     background: var(--bg3); border: 1px solid var(--border); border-radius: 6px;
@@ -335,8 +348,10 @@
         <span class="pill" data-type="AIS_ANOMALY">✸ Anomaly</span>
       </div>
     </div>
+    <div id="new-banner"></div>
     <div id="feed-list">
       <div id="no-results">No events match the current filter.</div>
+      <button id="mmsi-hint"></button>
     </div>
   </div>
 </div>
@@ -346,6 +361,7 @@
   <span>Active vessels (1h): <b id="s-vessels">—</b></span>
   <span>Multi-source: <b id="s-multi">—</b></span>
   <span>Last anchor: <b id="s-anchor">—</b></span>
+  <span>Updated: <b id="s-updated">—</b></span>
 </div>
 
 <!-- Event detail modal -->
@@ -385,6 +401,21 @@ function flagEmoji(cc) {
 
 function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+}
+
+// Today → HH:MM:SS; older events keep their date visible
+function fmtTs(iso) {
+  const d = new Date(iso);
+  if (d.toDateString() === new Date().toDateString()) {
+    return d.toLocaleTimeString('en-GB', { hour12: false });
+  }
+  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) + ' '
+    + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+}
+
+// Shareable deep links: #vessel=<mmsi> / #event=<id>
+function setHash(h) {
+  history.replaceState(null, '', h ? '#' + h : location.pathname + location.search);
 }
 
 // ── Map ──────────────────────────────────────────────────────────────────────
@@ -552,6 +583,7 @@ function closePanel() {
     m.setIcon(vesselIcon(m._v || {}, false));
   }
   selectedMmsi = null;
+  if (location.hash.startsWith('#vessel=')) setHash('');
 }
 
 function openVesselPanel(mmsi) {
@@ -562,6 +594,7 @@ function openVesselPanel(mmsi) {
     prev.setOpacity(1);
   }
   selectedMmsi = mmsi;
+  setHash('vessel=' + mmsi);
   clearTrack();
   if (markers[mmsi]) {
     const m = markers[mmsi];
@@ -677,6 +710,7 @@ function agoShort(iso) {
   return s < 60 ? s + 's ago' : s < 3600 ? Math.floor(s/60) + 'm ago' : Math.floor(s/3600) + 'h ago';
 }
 
+let lastPollOk = 0;
 async function poll() {
   try {
     const d = await fetch('/api/live').then(r => r.json());
@@ -685,9 +719,19 @@ async function poll() {
     document.getElementById('s-vessels').textContent = d.stats?.active_1h ?? '0';
     document.getElementById('s-multi').textContent   = (d.vessels || []).filter(v => (v.sources || []).length >= 2).length;
     document.getElementById('s-anchor').textContent  = agoShort(d.stats?.last_anchor);
+    lastPollOk = Date.now();
   } catch {}
 }
 poll(); setInterval(poll, 10000);
+
+// Footer freshness indicator — turns red when /api/live stops answering
+const updEl = document.getElementById('s-updated');
+setInterval(() => {
+  if (!lastPollOk) return;
+  const s = Math.floor((Date.now() - lastPollOk) / 1000);
+  updEl.textContent = s + 's ago';
+  updEl.classList.toggle('stale', s > 30);
+}, 1000);
 
 // ── Search + filter ───────────────────────────────────────────────────────────
 let activeType   = 'ALL';
@@ -721,6 +765,7 @@ function applyFilters() {
     if (show) visible++;
   });
   noResults.style.display = (visible === 0 && cards.length > 0) ? 'block' : 'none';
+  updateCount();
 
   // Dim map markers that don't match search
   if (searchText) {
@@ -745,15 +790,29 @@ document.getElementById('type-pills').addEventListener('click', e => {
 });
 
 // Search input
+const mmsiHint = document.getElementById('mmsi-hint');
+function updateMmsiHint() {
+  // A full MMSI may belong to a vessel outside the (100-card) feed — offer direct lookup
+  if (/^\d{9}$/.test(searchText)) {
+    mmsiHint.textContent = 'Open vessel panel for MMSI ' + searchText + ' →';
+    mmsiHint.style.display = 'block';
+  } else {
+    mmsiHint.style.display = 'none';
+  }
+}
+mmsiHint.addEventListener('click', () => openVesselPanel(searchText));
+
 searchInput.addEventListener('input', () => {
   searchText = searchInput.value.trim().toLowerCase();
   searchClear.style.display = searchText ? 'block' : 'none';
+  updateMmsiHint();
   applyFilters();
 });
 searchClear.addEventListener('click', () => {
   searchInput.value = '';
   searchText = '';
   searchClear.style.display = 'none';
+  updateMmsiHint();
   applyFilters();
 });
 
@@ -775,7 +834,10 @@ function clearEvidence() {
   if (evidenceLayer) { map.removeLayer(evidenceLayer); evidenceLayer = null; }
 }
 
-function closeEventModal() { evtModal.classList.add('hidden'); }
+function closeEventModal() {
+  evtModal.classList.add('hidden');
+  if (location.hash.startsWith('#event=')) setHash('');
+}
 
 evtModal.addEventListener('click', e => { if (e.target === evtModal) closeEventModal(); });
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeEventModal(); });
@@ -796,10 +858,21 @@ function hashRow(label, value) {
 }
 
 function openEventModal(id) {
+  setHash('event=' + id);
   fetch('/api/events/' + encodeURIComponent(id))
     .then(r => r.ok ? r.json() : Promise.reject(r.status))
     .then(ev => renderEventModal(ev))
-    .catch(() => {});
+    .catch(status => {
+      const why = status === 429
+        ? 'Too many requests from this client — wait a minute and try again.'
+        : 'The server did not respond. Try again shortly.';
+      evtModalCard.innerHTML =
+        '<button id="em-close">✕</button>'
+        + '<div class="em-title">⚠ Could not load event</div>'
+        + '<div class="em-sub">' + why + '</div>';
+      evtModalCard.querySelector('#em-close').addEventListener('click', closeEventModal);
+      evtModal.classList.remove('hidden');
+    });
 }
 
 function renderEventModal(ev) {
@@ -871,13 +944,54 @@ function showEvidence() {
 let total = 0;
 const feedList = document.getElementById('feed-list');
 const cntEl    = document.getElementById('evt-count');
+const banner   = document.getElementById('new-banner');
 
 function badgeClass(c) { return c >= 75 ? 'hi' : c >= 50 ? 'md' : 'lo'; }
 
+// Counter reads "visible / received" — the list itself is capped at 100 cards
+function updateCount() {
+  const visible = feedList.querySelectorAll('.card:not(.hidden)').length;
+  cntEl.textContent = visible + ' / ' + total;
+  cntEl.title = total + ' events received since page load';
+}
+
+// Hold new cards while the pointer is over the list, so rows don't shift mid-click
+let feedPaused = false;
+const pendingEvents = [];
+
+function updateBanner() {
+  if (pendingEvents.length) {
+    banner.textContent = '▲ ' + pendingEvents.length + ' new event' + (pendingEvents.length > 1 ? 's' : '') + ' — click to show';
+    banner.style.display = 'block';
+  } else {
+    banner.style.display = 'none';
+  }
+}
+
+function flushPending() {
+  while (pendingEvents.length) insertCard(pendingEvents.shift());
+  updateBanner();
+  updateCount();
+}
+
+feedList.addEventListener('mouseenter', () => { feedPaused = true; });
+feedList.addEventListener('mouseleave', () => { feedPaused = false; flushPending(); });
+banner.addEventListener('click', () => { feedPaused = false; flushPending(); });
+
 function addEvent(e) {
   total++;
-  cntEl.textContent = total;
-  const ts   = new Date(e.ts).toLocaleTimeString('en-GB', { hour12: false });
+  if (feedPaused) {
+    pendingEvents.push(e);
+    if (pendingEvents.length > 100) pendingEvents.shift();
+    updateBanner();
+  } else {
+    insertCard(e);
+  }
+  updateCount();
+}
+
+function insertCard(e) {
+  const ts   = fmtTs(e.ts);
   const icon = ICONS[e.type] || '•';
   const conf = Number(e.conf).toFixed(1);
   const srcs = (e.corroborationSources || []);
@@ -917,7 +1031,9 @@ function addEvent(e) {
   el.addEventListener('click', () => openEventModal(el.dataset.id));
 
   feedList.insertBefore(el, feedList.firstChild);
-  while (feedList.children.length > 101) feedList.removeChild(feedList.lastChild); // +1 for #no-results
+  // Trim oldest card only — #no-results and #mmsi-hint live at the bottom of the list
+  const cards = feedList.querySelectorAll('.card');
+  if (cards.length > 100) cards[cards.length - 1].remove();
   // Update "no results" visibility
   const visible = feedList.querySelectorAll('.card:not(.hidden)').length;
   noResults.style.display = (visible === 0) ? 'block' : 'none';
@@ -926,14 +1042,28 @@ function addEvent(e) {
 const dot   = document.getElementById('live-dot');
 const label = document.getElementById('live-label');
 
+// Exponential backoff — the server caps concurrent streams per IP, so a tab
+// that can't get a slot must not hammer it every 3 s forever
+let sseRetry = 3000;
 (function connect() {
   const es = new EventSource('/stream/events');
-  es.onopen    = () => { dot.className = 'on'; label.textContent = 'live'; };
+  es.onopen    = () => { dot.className = 'on'; label.textContent = 'live'; sseRetry = 3000; };
   es.onmessage = e => { try { addEvent(JSON.parse(e.data)); } catch {} };
   es.onerror   = () => {
-    dot.className = ''; label.textContent = 'reconnecting…';
-    es.close(); setTimeout(connect, 3000);
+    dot.className = ''; label.textContent = 'reconnecting in ' + Math.round(sseRetry / 1000) + 's…';
+    es.close();
+    setTimeout(connect, sseRetry);
+    sseRetry = Math.min(sseRetry * 2, 60000);
   };
+})();
+
+// Deep link: restore vessel panel or event modal from the URL hash
+(function initFromHash() {
+  const h = location.hash.slice(1);
+  let m = h.match(/^vessel=(\d{9})$/);
+  if (m) { openVesselPanel(m[1]); return; }
+  m = h.match(/^event=([A-Za-z0-9_-]+)$/);
+  if (m) openEventModal(m[1]);
 })();
 </script>
 </body>
