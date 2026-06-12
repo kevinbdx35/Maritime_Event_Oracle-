@@ -9,7 +9,8 @@ export async function vesselsRoutes(app: FastifyInstance): Promise<void> {
     const { mmsi } = req.params
     if (!/^\d{9}$/.test(mmsi)) return reply.code(400).send({ error: 'invalid mmsi' })
 
-    const limit = Math.min(parseInt(req.query.limit ?? '50'), 200)
+    const parsed = parseInt(req.query.limit ?? '50')
+    const limit = Number.isNaN(parsed) ? 50 : Math.min(Math.max(parsed, 1), 200)
     const params: unknown[] = [mmsi]
     const where = [`mmsi = $1`]
 

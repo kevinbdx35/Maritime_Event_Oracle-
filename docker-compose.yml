@@ -6,7 +6,7 @@ services:
       POSTGRES_USER: maritime
       POSTGRES_PASSWORD: maritime_dev
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - timescale_data:/home/postgres/pgdata/data
     healthcheck:
@@ -33,7 +33,7 @@ services:
             --state-interval 60
         fi
     ports:
-      - "8545:8545"
+      - "127.0.0.1:8545:8545"
     volumes:
       - anvil_state:/state
     healthcheck:

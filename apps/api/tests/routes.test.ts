@@ -37,6 +37,7 @@ describe('GET /api/vessels/:mmsi', () => {
       .mockResolvedValueOnce({ rows: [{ state: 'MOORED' }] })
       .mockResolvedValueOnce({ rows: [{ event_type: 'PORT_ARRIVAL', timestamp: '2026-06-10T07:35:00Z', confidence: 87 }] })
       .mockResolvedValueOnce({ rows: [{ n: '3' }] })
+      .mockResolvedValueOnce({ rows: [{ sources: ['aisstream', 'aishub'] }] })
 
     const app = await buildApp()
     const res = await app.inject({ method: 'GET', url: '/api/vessels/244820000' })

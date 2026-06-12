@@ -25,7 +25,8 @@ export async function eventsRoutes(app: FastifyInstance): Promise<void> {
       mmsi?: string; limit?: string; cursor?: string
     }
   }>('/events', async (req) => {
-    const limit = Math.min(parseInt(req.query.limit ?? '50'), 200)
+    const parsed = parseInt(req.query.limit ?? '50')
+    const limit = Number.isNaN(parsed) ? 50 : Math.min(Math.max(parsed, 1), 200)
     const params: unknown[] = []
     const where: string[] = ['1=1']
 

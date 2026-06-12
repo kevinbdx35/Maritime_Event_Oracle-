@@ -38,6 +38,9 @@ export function setupWebhooks(): void {
   eventBus.on('event', (evt: MaritimeEvent) => {
     dispatch(evt).catch(err => console.error('[webhook] error', err))
   })
-  const { urls } = getConfig()
-  if (urls.length) console.log(`[webhooks] registered for ${urls.length} endpoint(s)`)
+  const { urls, secret } = getConfig()
+  if (urls.length) {
+    console.log(`[webhooks] registered for ${urls.length} endpoint(s)`)
+    if (!secret) console.warn('[webhooks] WEBHOOK_SECRET is empty — signatures are forgeable, receivers cannot authenticate payloads')
+  }
 }

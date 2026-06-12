@@ -1,11 +1,19 @@
 import type { FastifyInstance } from 'fastify'
-import { randomBytes, createHash } from 'crypto'
+import { randomBytes, createHash, timingSafeEqual } from 'crypto'
 import { query } from '../db.js'
 
 const ADMIN_SECRET = process.env['ADMIN_SECRET'] ?? ''
 
+function secretMatches(provided: unknown): boolean {
+  if (!ADMIN_SECRET || typeof provided !== 'string') return false
+  // Compare digests so lengths always match — keeps the comparison constant-time
+  const a = createHash('sha256').update(provided).digest()
+  const b = createHash('sha256').update(ADMIN_SECRET).digest()
+  return timingSafeEqual(a, b)
+}
+
 function requireAdmin(req: { headers: Record<string, unknown> }, reply: { code: (n: number) => { send: (b: unknown) => unknown } }): boolean {
-  if (!ADMIN_SECRET || req.headers['x-admin-secret'] !== ADMIN_SECRET) {
+  if (!secretMatches(req.headers['x-admin-secret'])) {
     reply.code(403).send({ error: 'Forbidden' })
     return false
   }

@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "@maritime/core": "workspace:*",
-    "fastify": "^4.26.0",
+    "fastify": "^5",
     "pg": "^8.11.3",
     "zod": "^3.22.4"
   },

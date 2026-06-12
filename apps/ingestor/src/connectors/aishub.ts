@@ -4,7 +4,8 @@ import { AISConnector } from './base.js'
 
 // AISHub.net — free HTTP polling API (register at https://www.aishub.net/join)
 // Recommended polling interval: 60 s (free tier)
-const AISHUB_URL      = 'http://data.aishub.net/ws.php'
+// HTTPS — the API key travels as a query param, never send it in cleartext
+const AISHUB_URL      = 'https://data.aishub.net/ws.php'
 const POLL_INTERVAL_MS = 60_000
 
 interface AISHubMeta   { ERROR: boolean; FOUND_ROWS: number }

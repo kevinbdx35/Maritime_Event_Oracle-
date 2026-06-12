@@ -22,6 +22,11 @@
     "logs": "pm2 logs",
     "status": "pm2 status"
   },
+  "pnpm": {
+    "overrides": {
+      "bn.js@<4.12.3": ">=4.12.3"
+    }
+  },
   "devDependencies": {
     "@types/node": "^20.11.0",
     "tsx": "^4.7.0",
