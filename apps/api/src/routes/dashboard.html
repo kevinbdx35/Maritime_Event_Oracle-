@@ -246,10 +246,16 @@
   .vp-tl-item .ve-type { font-weight: 600; }
   .vp-tl-item .ve-conf { color: var(--muted); }
 
-  #vp-mt-link { display: block; margin-top: 16px; font-size: 11px; color: var(--blue);
+  #vp-mt-link { display: block; margin-top: 8px; font-size: 11px; color: var(--blue);
     text-decoration: none; text-align: center; padding: 6px; border: 1px solid var(--border);
     border-radius: 4px; }
   #vp-mt-link:hover { background: var(--bg3); }
+
+  #vp-filter-feed { display: block; width: 100%; margin-top: 16px; font-size: 11px;
+    color: var(--teal); background: none; text-align: center; padding: 6px;
+    border: 1px solid var(--border); border-radius: 4px; cursor: pointer;
+    font-family: var(--mono); }
+  #vp-filter-feed:hover { background: var(--bg3); border-color: var(--teal); }
 
   #vp-loading { text-align: center; padding: 40px 0; color: var(--muted); font-size: 12px; }
   #vp-error   { color: var(--red); text-align: center; padding: 20px; font-size: 12px; }
@@ -700,7 +706,14 @@ function renderVesselPanel(v) {
     +   '<div class="vp-field" style="grid-column:1/-1"><label>Speed profile</label><div id="vp-spark"><span class="spark-max">loading track…</span></div></div>'
     + '</div>'
     + (eventsHtml ? '<div id="vp-events-hdr">Recent events</div><div class="vp-timeline">' + eventsHtml + '</div>' : '')
+    + '<button id="vp-filter-feed">Filter event feed on this vessel ⏷</button>'
     + '<a id="vp-mt-link" href="' + mtUrl + '" target="_blank" rel="noopener">View on MarineTraffic ↗</a>';
+
+  // Route through the search input so clear/hint/filter logic stays in one place
+  vpBody.querySelector('#vp-filter-feed').addEventListener('click', () => {
+    searchInput.value = v.mmsi;
+    searchInput.dispatchEvent(new Event('input'));
+  });
 }
 
 // ── Stats ────────────────────────────────────────────────────────────────────
